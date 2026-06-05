@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: mafia-server
-    env: node
-    buildCommand: ""
-    startCommand: node server.js
-    envVars:
-      - key: HOST
-        value: 0.0.0.0
