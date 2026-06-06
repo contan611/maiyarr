@@ -121,13 +121,14 @@ function send(action, extra = {}) {
 }
 
 function nameValue() {
-  return account?.username || $("nameInput").value.trim() || `학생${Math.floor(Math.random() * 90 + 10)}`;
+  return account?.displayName || account?.username || $("nameInput").value.trim() || `학생${Math.floor(Math.random() * 90 + 10)}`;
 }
 
 function setAccount(user) {
   account = user;
-  $("nameInput").value = user?.username || "";
-  $("homeTitle").textContent = user ? `${user.username} 님, 게임 선택` : "게임 선택";
+  $("nameInput").value = user?.displayName || user?.username || "";
+  $("profileDisplayName").value = user?.displayName || user?.username || "";
+  $("homeTitle").textContent = user ? `${user.displayName || user.username} 님, 게임 선택` : "게임 선택";
   $("adminBadge").classList.toggle("hidden", !user?.isAdmin);
 }
 
@@ -163,8 +164,19 @@ function authSubmit(action) {
   send(action, {
     username: $("loginIdInput").value,
     password: $("loginPwInput").value,
+    displayName: $("displayNameInput").value,
     remember: $("rememberLogin").checked,
   });
+}
+
+function saveProfile() {
+  send("profileUpdate", {
+    displayName: $("profileDisplayName").value,
+    currentPassword: $("currentPasswordInput").value,
+    newPassword: $("newPasswordInput").value,
+  });
+  $("currentPasswordInput").value = "";
+  $("newPasswordInput").value = "";
 }
 
 function render() {
@@ -572,9 +584,10 @@ $("loginBtn").addEventListener("click", () => authSubmit("authLogin"));
 $("registerBtn").addEventListener("click", () => authSubmit("authRegister"));
 $("checkIdBtn").addEventListener("click", () => send("usernameCheck", { username: $("loginIdInput").value }));
 $("loginIdInput").addEventListener("input", () => {
-  $("idCheckText").textContent = "관리자 로그인: admin / tksxh1357!";
+  $("idCheckText").textContent = "아이디와 게임 표시 이름은 따로 사용할 수 있습니다.";
   $("idCheckText").classList.remove("ok", "bad");
 });
+$("saveProfileBtn").addEventListener("click", saveProfile);
 $("logoutBtn").addEventListener("click", () => {
   localStorage.removeItem("mafiaAuthToken");
   sessionStorage.removeItem("mafiaAuthToken");
