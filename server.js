@@ -73,7 +73,6 @@ const FOOTBALL_TEAMS = [
 ];
 const FOOTBALL_START_COINS = 1000;
 const FOOTBALL_BET_MS = 12000;
-ensureAdminUser();
 
 function makeId(bytes = 8) {
   return crypto.randomBytes(bytes).toString("hex");
@@ -101,6 +100,13 @@ function normalizeUsername(username) {
     .slice(0, 16);
 }
 
+function normalizeDisplayName(name, fallback = "") {
+  return String(name || fallback || "")
+    .replace(/[^\p{L}\p{N} _.-]/gu, "")
+    .trim()
+    .slice(0, 16);
+}
+
 function passwordHash(password, salt = makeId(12)) {
   const hash = crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
   return `${salt}:${hash}`;
@@ -113,12 +119,18 @@ function verifyPassword(password, stored) {
 
 function publicUser(user) {
   if (!user) return null;
-  return { id: user.id, username: user.username, footballCoins: user.footballCoins ?? FOOTBALL_START_COINS, isAdmin: isAdminUser(user) };
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName || user.username,
+    footballCoins: user.footballCoins ?? FOOTBALL_START_COINS,
+    isAdmin: isAdminUser(user),
+  };
 }
 
 function isAdminUser(user) {
   if (!user) return false;
-  const configured = String(process.env.ADMIN_USERS || "admin")
+  const configured = String(process.env.ADMIN_USERS || "")
     .split(",")
     .map((name) => name.trim().toLowerCase())
     .filter(Boolean);
@@ -141,7 +153,8 @@ function saveFootballCoins(accountId, coins) {
 }
 
 function authName(client) {
-  return users.get(client?.userId)?.username || null;
+  const user = users.get(client?.userId);
+  return user ? user.displayName || user.username : null;
 }
 
 function createSession(userId) {
@@ -154,26 +167,6 @@ function isAdminClient(client) {
   return isAdminUser(users.get(client?.userId));
 }
 
-function ensureAdminUser() {
-  const username = "admin";
-  let user = [...users.values()].find((item) => item.username.toLowerCase() === username);
-  if (!user) {
-    user = {
-      id: makeId(8),
-      username,
-      passwordHash: passwordHash("tksxh1357!"),
-      footballCoins: FOOTBALL_START_COINS,
-      isAdmin: true,
-      createdAt: Date.now(),
-    };
-  } else {
-    user.passwordHash = passwordHash("tksxh1357!");
-    user.isAdmin = true;
-    if (!Number.isFinite(user.footballCoins)) user.footballCoins = FOOTBALL_START_COINS;
-  }
-  users.set(user.id, user);
-  saveUsers();
-}
 
 function makeRoomCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -883,6 +876,7 @@ function handleAction(id, message) {
       user = {
         id: makeId(8),
         username,
+        displayName: normalizeDisplayName(data.displayName, username),
         passwordHash: passwordHash(password),
         footballCoins: FOOTBALL_START_COINS,
         isAdmin: users.size === 0 || adminNames.includes(username.toLowerCase()),
@@ -896,6 +890,23 @@ function handleAction(id, message) {
     client.userId = user.id;
     const token = createSession(user.id);
     return send(client.socket, { type: "auth", user: publicUser(user), token: data.remember ? token : null, sessionToken: token });
+  }
+
+  if (data.action === "profileUpdate") {
+    const user = users.get(client.userId);
+    if (!user) return send(client.socket, { type: "error", message: "먼저 로그인하세요." });
+    const displayName = normalizeDisplayName(data.displayName, user.displayName || user.username);
+    if (displayName.length < 2) return send(client.socket, { type: "error", message: "표시 이름은 2글자 이상이어야 합니다." });
+    user.displayName = displayName;
+    const newPassword = String(data.newPassword || "");
+    if (newPassword) {
+      if (newPassword.length < 4) return send(client.socket, { type: "error", message: "새 비밀번호는 4글자 이상이어야 합니다." });
+      if (!verifyPassword(String(data.currentPassword || ""), user.passwordHash)) return send(client.socket, { type: "error", message: "현재 비밀번호가 맞지 않습니다." });
+      user.passwordHash = passwordHash(newPassword);
+    }
+    users.set(user.id, user);
+    saveUsers();
+    return send(client.socket, { type: "auth", user: publicUser(user), sessionToken: createSession(user.id) });
   }
 
   if (data.action === "authRestore") {
