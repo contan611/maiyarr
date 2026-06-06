@@ -7,12 +7,16 @@ const fs = require("fs");
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
 const PUBLIC_DIR = path.join(__dirname, "public");
+const DATA_DIR = path.join(__dirname, "data");
+const USERS_FILE = path.join(DATA_DIR, "users.json");
 const MAX_PLAYERS = 24;
 const ROOM_TTL_MS = 1000 * 60 * 60 * 6;
 const LOBBY_DISCONNECT_GRACE_MS = 25000;
 
 const rooms = new Map();
 const clients = new Map();
+const users = loadUsers();
+const sessions = new Map();
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -60,8 +64,115 @@ const DEFAULT_SETTINGS = {
   autoAdvance: true,
 };
 
+const FOOTBALL_TEAMS = [
+  ["레드 유나이티드", "블루 시티"],
+  ["스톰 FC", "썬더 일레븐"],
+  ["화이트 타이거즈", "블랙 스타즈"],
+  ["네온 서울", "메트로 원더러스"],
+  ["아이언 킥스", "골든 윙스"],
+];
+const FOOTBALL_START_COINS = 1000;
+const FOOTBALL_BET_MS = 12000;
+ensureAdminUser();
+
 function makeId(bytes = 8) {
   return crypto.randomBytes(bytes).toString("hex");
+}
+
+function loadUsers() {
+  try {
+    const raw = fs.readFileSync(USERS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    return new Map(Object.entries(parsed.users || {}));
+  } catch {
+    return new Map();
+  }
+}
+
+function saveUsers() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(USERS_FILE, JSON.stringify({ users: Object.fromEntries(users) }, null, 2));
+}
+
+function normalizeUsername(username) {
+  return String(username || "")
+    .replace(/[^\p{L}\p{N}_-]/gu, "")
+    .trim()
+    .slice(0, 16);
+}
+
+function passwordHash(password, salt = makeId(12)) {
+  const hash = crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  const [salt] = String(stored || "").split(":");
+  return passwordHash(password, salt) === stored;
+}
+
+function publicUser(user) {
+  if (!user) return null;
+  return { id: user.id, username: user.username, footballCoins: user.footballCoins ?? FOOTBALL_START_COINS, isAdmin: isAdminUser(user) };
+}
+
+function isAdminUser(user) {
+  if (!user) return false;
+  const configured = String(process.env.ADMIN_USERS || "admin")
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  return Boolean(user.isAdmin || configured.includes(String(user.username).toLowerCase()));
+}
+
+function footballCoinsFor(accountId) {
+  if (!accountId) return FOOTBALL_START_COINS;
+  const user = users.get(accountId);
+  return user?.footballCoins ?? FOOTBALL_START_COINS;
+}
+
+function saveFootballCoins(accountId, coins) {
+  if (!accountId) return;
+  const user = users.get(accountId);
+  if (!user) return;
+  user.footballCoins = Math.max(0, Math.floor(coins));
+  users.set(accountId, user);
+  saveUsers();
+}
+
+function authName(client) {
+  return users.get(client?.userId)?.username || null;
+}
+
+function createSession(userId) {
+  const token = makeId(24);
+  sessions.set(token, userId);
+  return token;
+}
+
+function isAdminClient(client) {
+  return isAdminUser(users.get(client?.userId));
+}
+
+function ensureAdminUser() {
+  const username = "admin";
+  let user = [...users.values()].find((item) => item.username.toLowerCase() === username);
+  if (!user) {
+    user = {
+      id: makeId(8),
+      username,
+      passwordHash: passwordHash("tksxh1357!"),
+      footballCoins: FOOTBALL_START_COINS,
+      isAdmin: true,
+      createdAt: Date.now(),
+    };
+  } else {
+    user.passwordHash = passwordHash("tksxh1357!");
+    user.isAdmin = true;
+    if (!Number.isFinite(user.footballCoins)) user.footballCoins = FOOTBALL_START_COINS;
+  }
+  users.set(user.id, user);
+  saveUsers();
 }
 
 function makeRoomCode() {
@@ -103,11 +214,12 @@ function serverMeta(req) {
   };
 }
 
-function createRoom(hostId, hostName) {
+function createRoom(hostId, hostName, mode = "mafia", accountId = null) {
   const code = makeRoomCode();
   const room = {
     code,
     hostId,
+    mode: mode === "football" ? "football" : "mafia",
     phase: "lobby",
     day: 0,
     winner: null,
@@ -128,14 +240,19 @@ function createRoom(hostId, hostName) {
     deadMessages: [],
     log: [],
     events: [],
+    football: createFootballState(),
+    footballWallets: new Map(),
+    footballBets: new Map(),
+    footballDirectActions: new Map(),
+    footballTimers: [],
   };
   rooms.set(code, room);
-  addPlayer(room, hostId, hostName);
+  addPlayer(room, hostId, hostName, accountId);
   addLog(room, `${room.players.get(hostId).name} 님이 방을 만들었습니다.`);
   return room;
 }
 
-function addPlayer(room, id, name) {
+function addPlayer(room, id, name, accountId = null) {
   if (room.disconnectTimers.has(id)) {
     clearTimeout(room.disconnectTimers.get(id));
     room.disconnectTimers.delete(id);
@@ -144,6 +261,8 @@ function addPlayer(room, id, name) {
     const existing = room.players.get(id);
     existing.connected = true;
     if (name) existing.name = sanitizeName(name);
+    if (accountId) existing.accountId = accountId;
+    if (!room.footballWallets.has(id)) room.footballWallets.set(id, footballCoinsFor(accountId));
     touch(room);
     return existing;
   }
@@ -155,8 +274,10 @@ function addPlayer(room, id, name) {
     joinedAt: Date.now(),
     connected: true,
     spectator: room.phase !== "lobby",
+    accountId,
   };
   room.players.set(id, player);
+  if (!room.footballWallets.has(id)) room.footballWallets.set(id, footballCoinsFor(accountId));
   touch(room);
   return player;
 }
@@ -275,6 +396,44 @@ function phaseProgress(room) {
   return { needed: 0, done: 0, ready: false, label: "대기" };
 }
 
+function createFootballState() {
+  const teams = randomFootballTeams();
+  return {
+    phase: "idle",
+    teams,
+    score: [0, 0],
+    events: [],
+    betsOpenUntil: 0,
+    winner: null,
+    winnerText: "",
+    matchId: makeId(4),
+  };
+}
+
+function randomFootballTeams() {
+  return FOOTBALL_TEAMS[Math.floor(Math.random() * FOOTBALL_TEAMS.length)].slice();
+}
+
+function footballState(room, viewerId) {
+  const bets = [...room.footballBets.values()];
+  const homeTotal = bets.filter((bet) => bet.side === "home").reduce((sum, bet) => sum + bet.amount, 0);
+  const awayTotal = bets.filter((bet) => bet.side === "away").reduce((sum, bet) => sum + bet.amount, 0);
+  const myBet = room.footballBets.get(viewerId) || null;
+  return {
+    ...room.football,
+    wallet: room.footballWallets.get(viewerId) ?? FOOTBALL_START_COINS,
+    myBet,
+    totals: { home: homeTotal, away: awayTotal },
+    betCount: bets.length,
+    leaders: [...room.players.values()].map((player) => ({
+      id: player.id,
+      name: player.name,
+      coins: room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS,
+      connected: player.connected,
+    })).sort((a, b) => b.coins - a.coins).slice(0, 8),
+  };
+}
+
 function maybeAutoAdvance(room) {
   if (room.phase === "ended") return false;
   const progress = phaseProgress(room);
@@ -286,9 +445,11 @@ function maybeAutoAdvance(room) {
 
 function roomState(room, viewerId) {
   const me = room.players.get(viewerId);
+  const viewerClient = clients.get(viewerId);
   const canReadDeadChat = Boolean(me && room.phase !== "lobby" && !me.alive && !me.spectator);
   return {
     code: room.code,
+    mode: room.mode,
     phase: room.phase,
     day: room.day,
     hostId: room.hostId,
@@ -296,6 +457,7 @@ function roomState(room, viewerId) {
     winnerText: room.winnerText,
     settings: room.settings,
     roleInfo: ROLE_INFO,
+    account: publicUser(users.get(viewerClient?.userId)),
     you: me ? { id: me.id, name: me.name, role: me.role, alive: me.alive, connected: me.connected, spectator: me.spectator } : null,
     players: playerList(room, viewerId),
     votes: publicVotes(room),
@@ -306,6 +468,7 @@ function roomState(room, viewerId) {
     canUseDeadChat: Boolean(me && room.phase !== "lobby" && !me.alive && !me.spectator),
     log: room.log.slice(-40),
     event: room.events.at(-1) || null,
+    football: footballState(room, viewerId),
     notices: room.privateNotices.get(viewerId)?.slice(-12) || [],
     deadPlayers: [...room.players.values()].filter((player) => !player.alive).map((player) => ({ id: player.id, name: player.name })),
   };
@@ -355,6 +518,9 @@ function leaveRoom(room, id, reason = "leave") {
   const player = room.players.get(id);
   room.players.delete(id);
   room.dayVotes.delete(id);
+  room.footballBets.delete(id);
+  room.footballDirectActions.delete(id);
+  room.footballWallets.delete(id);
   for (const targetVotes of Object.values(room.nightActions)) targetVotes.delete(id);
   for (const [from, target] of [...room.dayVotes.entries()]) {
     if (target === id) room.dayVotes.delete(from);
@@ -412,6 +578,125 @@ function addNotice(room, playerId, text) {
   const list = room.privateNotices.get(playerId) || [];
   list.push({ text, at: Date.now() });
   room.privateNotices.set(playerId, list.slice(-20));
+}
+
+function clearFootballTimers(room) {
+  for (const timer of room.footballTimers) clearTimeout(timer);
+  room.footballTimers = [];
+}
+
+function addFootballEvent(room, text, level = "info") {
+  room.football.events.push({ text, level, at: Date.now() });
+  if (room.football.events.length > 16) room.football.events.splice(0, room.football.events.length - 16);
+}
+
+function startFootballBetting(room) {
+  clearFootballTimers(room);
+  room.mode = "football";
+  room.phase = "lobby";
+  room.winner = null;
+  room.winnerText = "";
+  room.football = createFootballState();
+  room.football.phase = "betting";
+  room.football.betsOpenUntil = Date.now() + FOOTBALL_BET_MS;
+  room.footballBets.clear();
+  room.footballDirectActions.clear();
+  addFootballEvent(room, `${room.football.teams[0]} vs ${room.football.teams[1]} 베팅이 열렸습니다.`, "phase");
+  addEvent(room, "football-bet", "AI 축구 베팅", "12초 안에 이길 팀을 골라 베팅하세요.", "vote");
+  addLog(room, "AI 축구 베팅이 시작되었습니다.", "phase");
+  room.footballTimers.push(setTimeout(() => runFootballMatch(room.code, room.football.matchId), FOOTBALL_BET_MS));
+}
+
+function placeFootballBet(room, player, side, amount) {
+  if (room.mode !== "football" || room.football.phase !== "betting") return false;
+  if (!["home", "away"].includes(side)) return false;
+  const wallet = room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS;
+  const safeAmount = clampInt(amount, 10, Math.max(10, wallet));
+  if (safeAmount > wallet) return false;
+  const existing = room.footballBets.get(player.id);
+  if (existing) room.footballWallets.set(player.id, wallet + existing.amount);
+  const nextWallet = (room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS) - safeAmount;
+  room.footballWallets.set(player.id, nextWallet);
+  saveFootballCoins(player.accountId, nextWallet);
+  room.footballBets.set(player.id, { playerId: player.id, name: player.name, side, amount: safeAmount });
+  addFootballEvent(room, `${player.name} 님이 ${side === "home" ? room.football.teams[0] : room.football.teams[1]}에 ${safeAmount}포인트 베팅했습니다.`, "bet");
+  return true;
+}
+
+function runFootballMatch(code, matchId) {
+  const room = rooms.get(code);
+  if (!room || room.mode !== "football" || room.football.matchId !== matchId || room.football.phase !== "betting") return;
+  room.football.phase = "running";
+  room.football.betsOpenUntil = 0;
+  addFootballEvent(room, "킥오프! AI 선수들이 경기를 시작했습니다.", "phase");
+  addEvent(room, "football-start", "킥오프", `${room.football.teams[0]} vs ${room.football.teams[1]} 경기가 시작됐습니다.`, "success");
+  broadcast(room);
+
+  const moments = [
+    "중원에서 강한 압박이 들어갑니다.",
+    "골키퍼가 슈퍼 세이브를 보여줍니다.",
+    "측면 돌파 후 크로스가 올라갑니다.",
+    "관중석이 술렁입니다. 결정적인 찬스!",
+  ];
+  moments.forEach((text, index) => {
+    room.footballTimers.push(setTimeout(() => {
+      const current = rooms.get(code);
+      if (!current || current.football.matchId !== matchId || current.football.phase !== "running") return;
+      addFootballEvent(current, text, "info");
+      broadcast(current);
+    }, 900 + index * 900));
+  });
+  room.footballTimers.push(setTimeout(() => finishFootballMatch(code, matchId), 5000));
+}
+
+function footballDirectPlay(room, player, move) {
+  if (room.mode !== "football" || room.football.phase !== "running") return false;
+  const used = room.footballDirectActions.get(player.id) || 0;
+  if (used >= 4) return false;
+  const bet = room.footballBets.get(player.id);
+  const side = bet?.side || (Math.random() > 0.5 ? "home" : "away");
+  const index = side === "home" ? 0 : 1;
+  const team = room.football.teams[index];
+  room.footballDirectActions.set(player.id, used + 1);
+  if (move === "shoot" && Math.random() < 0.3) {
+    room.football.score[index] += 1;
+    addFootballEvent(room, `${player.name} 님의 직접 슈팅! ${team} 득점입니다.`, "success");
+    addEvent(room, "football-goal", "GOAL", `${team} 득점! ${player.name} 님의 직접 플레이가 통했습니다.`, "success");
+  } else if (move === "defend" && Math.random() < 0.45) {
+    addFootballEvent(room, `${player.name} 님의 수비 지시가 상대 공격을 막았습니다.`, "phase");
+  } else {
+    addFootballEvent(room, `${player.name} 님의 직접 플레이가 아쉽게 빗나갔습니다.`, "info");
+  }
+  return true;
+}
+
+function finishFootballMatch(code, matchId) {
+  const room = rooms.get(code);
+  if (!room || room.mode !== "football" || room.football.matchId !== matchId || room.football.phase !== "running") return;
+  room.football.score[0] += Math.floor(Math.random() * 3);
+  room.football.score[1] += Math.floor(Math.random() * 3);
+  if (room.football.score[0] === room.football.score[1]) room.football.score[Math.random() > 0.5 ? 0 : 1] += 1;
+  const winnerSide = room.football.score[0] > room.football.score[1] ? "home" : "away";
+  const winnerIndex = winnerSide === "home" ? 0 : 1;
+  room.football.phase = "finished";
+  room.football.winner = winnerSide;
+  room.football.winnerText = `${room.football.teams[winnerIndex]} 승리`;
+
+  const totalPool = [...room.footballBets.values()].reduce((sum, bet) => sum + bet.amount, 0);
+  const winningPool = [...room.footballBets.values()].filter((bet) => bet.side === winnerSide).reduce((sum, bet) => sum + bet.amount, 0);
+  for (const bet of room.footballBets.values()) {
+    if (bet.side !== winnerSide) continue;
+    const payout = winningPool > 0 ? Math.max(bet.amount * 2, Math.floor((bet.amount / winningPool) * totalPool)) : bet.amount * 2;
+    const nextCoins = (room.footballWallets.get(bet.playerId) ?? 0) + payout;
+    room.footballWallets.set(bet.playerId, nextCoins);
+    saveFootballCoins(room.players.get(bet.playerId)?.accountId, nextCoins);
+  }
+
+  const result = `${room.football.teams[0]} ${room.football.score[0]} : ${room.football.score[1]} ${room.football.teams[1]}`;
+  addFootballEvent(room, `${result}. ${room.football.winnerText}!`, "success");
+  addEvent(room, "football-result", "경기 종료", `${result}. ${room.football.winnerText}!`, winnerSide === "home" ? "success" : "night");
+  addLog(room, `AI 축구 경기 종료: ${result}.`, "success");
+  broadcast(room);
 }
 
 function assignRoles(room) {
@@ -575,8 +860,62 @@ function handleAction(id, message) {
   let room = client.roomCode ? rooms.get(client.roomCode) : null;
   const data = message || {};
 
+  if (data.action === "usernameCheck") {
+    const username = normalizeUsername(data.username);
+    if (username.length < 2) return send(client.socket, { type: "usernameCheck", ok: false, message: "아이디는 2글자 이상이어야 합니다." });
+    const exists = [...users.values()].some((item) => item.username.toLowerCase() === username.toLowerCase());
+    return send(client.socket, {
+      type: "usernameCheck",
+      ok: !exists,
+      username,
+      message: exists ? "이미 사용 중인 아이디입니다." : "사용 가능한 아이디입니다.",
+    });
+  }
+
+  if (data.action === "authRegister" || data.action === "authLogin") {
+    const username = normalizeUsername(data.username);
+    const password = String(data.password || "");
+    if (username.length < 2 || password.length < 4) return send(client.socket, { type: "error", message: "아이디는 2글자 이상, 비밀번호는 4글자 이상이어야 합니다." });
+    let user = [...users.values()].find((item) => item.username.toLowerCase() === username.toLowerCase());
+    if (data.action === "authRegister") {
+      if (user) return send(client.socket, { type: "error", message: "이미 있는 아이디입니다." });
+      const adminNames = String(process.env.ADMIN_USERS || "admin").split(",").map((name) => name.trim().toLowerCase());
+      user = {
+        id: makeId(8),
+        username,
+        passwordHash: passwordHash(password),
+        footballCoins: FOOTBALL_START_COINS,
+        isAdmin: users.size === 0 || adminNames.includes(username.toLowerCase()),
+        createdAt: Date.now(),
+      };
+      users.set(user.id, user);
+      saveUsers();
+    } else if (!user || !verifyPassword(password, user.passwordHash)) {
+      return send(client.socket, { type: "error", message: "아이디 또는 비밀번호가 맞지 않습니다." });
+    }
+    client.userId = user.id;
+    const token = createSession(user.id);
+    return send(client.socket, { type: "auth", user: publicUser(user), token: data.remember ? token : null, sessionToken: token });
+  }
+
+  if (data.action === "authRestore") {
+    const userId = sessions.get(String(data.token || ""));
+    const user = userId ? users.get(userId) : null;
+    if (!user) return send(client.socket, { type: "auth", user: null });
+    client.userId = user.id;
+    return send(client.socket, { type: "auth", user: publicUser(user), token: data.token });
+  }
+
+  if (data.action === "authLogout") {
+    client.userId = null;
+    client.roomCode = null;
+    return send(client.socket, { type: "auth", user: null });
+  }
+
   if (data.action === "create") {
-    const newRoom = createRoom(id, data.name);
+    const name = authName(client);
+    if (!name) return send(client.socket, { type: "error", message: "먼저 로그인하세요." });
+    const newRoom = createRoom(id, name, data.mode, client.userId);
     client.roomCode = newRoom.code;
     return broadcast(newRoom);
   }
@@ -586,8 +925,10 @@ function handleAction(id, message) {
     room = rooms.get(code);
     if (!room) return send(client.socket, { type: "error", message: "방 코드를 찾을 수 없습니다." });
     if (room.players.size >= MAX_PLAYERS) return send(client.socket, { type: "error", message: "방 인원이 가득 찼습니다." });
+    const name = authName(client);
+    if (!name) return send(client.socket, { type: "error", message: "먼저 로그인하세요." });
     client.roomCode = code;
-    const player = addPlayer(room, id, data.name);
+    const player = addPlayer(room, id, name, client.userId);
     player.connected = true;
     addLog(room, room.phase === "lobby" ? `${player.name} 님이 입장했습니다.` : `${player.name} 님이 관전자로 입장했습니다.`);
     return broadcast(room);
@@ -596,13 +937,29 @@ function handleAction(id, message) {
   if (!room || !room.players.has(id)) return send(client.socket, { type: "error", message: "먼저 방을 만들거나 입장하세요." });
   touch(room);
   const player = room.players.get(id);
+  const canManageRoom = room.hostId === id || isAdminClient(client);
 
   if (data.action === "settings") {
-    if (room.hostId !== id || room.phase !== "lobby") return;
+    if (!canManageRoom || room.phase !== "lobby") return;
     room.settings = sanitizeSettings(data.settings, room.players.size);
     addLog(room, "방 설정이 변경되었습니다.");
+  } else if (data.action === "mode") {
+    if (!canManageRoom || room.phase !== "lobby") return;
+    const nextMode = data.mode === "football" ? "football" : "mafia";
+    if (room.mode !== nextMode) {
+      clearFootballTimers(room);
+      room.mode = nextMode;
+      room.football.phase = "idle";
+      room.football.betsOpenUntil = 0;
+      room.footballBets.clear();
+      addLog(room, nextMode === "football" ? "게임 모드가 AI 축구 베팅으로 변경되었습니다." : "게임 모드가 마피아로 변경되었습니다.", "phase");
+    }
   } else if (data.action === "start") {
-    if (room.hostId !== id) return;
+    if (!canManageRoom) return;
+    if (room.mode === "football") {
+      startFootballBetting(room);
+      return broadcast(room);
+    }
     const min = Math.max(3, specialRoleTotal(room.settings));
     if (room.players.size < min) return send(client.socket, { type: "error", message: `현재 설정으로는 최소 ${min}명이 필요합니다.` });
     room.settings = sanitizeSettings(room.settings, room.players.size);
@@ -616,6 +973,7 @@ function handleAction(id, message) {
     addLog(room, "게임이 시작되었습니다. 첫 밤입니다.", "phase");
     maybeAutoAdvance(room);
   } else if (data.action === "vote") {
+    if (room.mode !== "mafia") return;
     const isSkip = data.target === "skip";
     const target = isSkip ? { id: "skip", alive: true, spectator: false } : room.players.get(data.target);
     if ((!isSkip && !canTarget(player, target, room.phase)) || room.phase === "ended" || room.phase === "lobby") return;
@@ -628,6 +986,10 @@ function handleAction(id, message) {
       addLog(room, `${roleLabel(player.role)} 행동이 등록되었습니다. (${phaseProgress(room).done}/${phaseProgress(room).needed})`);
     }
     maybeAutoAdvance(room);
+  } else if (data.action === "footballBet") {
+    if (!placeFootballBet(room, player, data.side, data.amount)) return send(client.socket, { type: "error", message: "지금은 베팅할 수 없습니다." });
+  } else if (data.action === "footballPlay") {
+    if (!footballDirectPlay(room, player, data.move)) return send(client.socket, { type: "error", message: "지금은 직접 플레이를 할 수 없습니다." });
   } else if (data.action === "chat") {
     if (data.channel === "dead") {
       if (room.phase !== "lobby" && !player.alive && !player.spectator) addDeadMessage(room, player.name, data.text);
@@ -636,7 +998,7 @@ function handleAction(id, message) {
       if (canSpeak) addMessage(room, player.name, data.text);
     }
   } else if (data.action === "reset") {
-    if (room.hostId !== id) return;
+    if (!canManageRoom) return;
     resetRoom(room);
   } else if (data.action === "leave") {
     client.roomCode = null;
@@ -648,6 +1010,7 @@ function handleAction(id, message) {
 }
 
 function resetRoom(room) {
+  clearFootballTimers(room);
   room.phase = "lobby";
   room.day = 0;
   room.winner = null;
@@ -656,6 +1019,9 @@ function resetRoom(room) {
   room.privateNotices.clear();
   room.deadMessages = [];
   room.events = [];
+  room.football = createFootballState();
+  room.footballBets.clear();
+  room.footballDirectActions.clear();
   for (const player of room.players.values()) {
     player.role = null;
     player.alive = true;
@@ -760,7 +1126,7 @@ server.on("upgrade", (req, socket) => {
   if (previous?.socket && previous.socket !== socket) previous.socket.destroy();
   socket.clientId = id;
   socket.leftover = Buffer.alloc(0);
-  clients.set(id, { socket, roomCode: previous?.roomCode || null });
+  clients.set(id, { socket, roomCode: previous?.roomCode || null, userId: previous?.userId || null });
   socket.on("data", (chunk) => decodeFrames(socket, Buffer.concat([socket.leftover, chunk])));
   socket.on("error", () => {});
   socket.on("close", () => disconnectClient(id, socket));
