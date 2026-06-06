@@ -25,6 +25,9 @@ let autoJoinRoom = null;
 let reconnectTimer = null;
 let connectionToastAt = 0;
 let lastEventId = null;
+let account = null;
+let selectedMode = "mafia";
+let lastFootballEventId = null;
 const sessionId = getSessionId();
 
 async function loadMeta() {
@@ -44,20 +47,34 @@ function connect() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
     reconnectDelay = 500;
-    const savedRoom = localStorage.getItem("mafiaRoomCode");
-    const savedName = localStorage.getItem("mafiaName");
-    if (savedRoom && savedName) {
-      autoJoinRoom = savedRoom;
-      send("join", { name: savedName, code: savedRoom, auto: true });
-    }
+    const token = localStorage.getItem("mafiaAuthToken") || sessionStorage.getItem("mafiaAuthToken");
+    if (token) send("authRestore", { token });
+    else showAuth();
   });
   socket.addEventListener("message", (event) => {
     const data = JSON.parse(event.data);
     if (data.type === "state") {
       autoJoinRoom = null;
       state = data.state;
+      if (state.account) setAccount(state.account);
       localStorage.setItem("mafiaRoomCode", state.code);
       render();
+    } else if (data.type === "auth") {
+      if (data.user) {
+        setAccount(data.user);
+        if (data.token) localStorage.setItem("mafiaAuthToken", data.token);
+        else if (data.sessionToken) sessionStorage.setItem("mafiaAuthToken", data.sessionToken);
+        showHome();
+      } else {
+        account = null;
+        localStorage.removeItem("mafiaAuthToken");
+        sessionStorage.removeItem("mafiaAuthToken");
+        showAuth();
+      }
+    } else if (data.type === "usernameCheck") {
+      $("idCheckText").textContent = data.message;
+      $("idCheckText").classList.toggle("ok", Boolean(data.ok));
+      $("idCheckText").classList.toggle("bad", !data.ok);
     } else if (data.type === "left") {
       leaveLocalRoom();
     } else if (data.type === "error" || data.type === "notice") {
@@ -104,9 +121,50 @@ function send(action, extra = {}) {
 }
 
 function nameValue() {
-  const name = $("nameInput").value.trim() || localStorage.getItem("mafiaName") || `학생${Math.floor(Math.random() * 90 + 10)}`;
-  localStorage.setItem("mafiaName", name);
-  return name;
+  return account?.username || $("nameInput").value.trim() || `학생${Math.floor(Math.random() * 90 + 10)}`;
+}
+
+function setAccount(user) {
+  account = user;
+  $("nameInput").value = user?.username || "";
+  $("homeTitle").textContent = user ? `${user.username} 님, 게임 선택` : "게임 선택";
+  $("adminBadge").classList.toggle("hidden", !user?.isAdmin);
+}
+
+function showAuth() {
+  $("authPanel").classList.remove("hidden");
+  $("homePanel").classList.add("hidden");
+  $("joinPanel").classList.add("hidden");
+  $("gamePanel").classList.add("hidden");
+}
+
+function showHome() {
+  if (!account) return showAuth();
+  state = null;
+  $("authPanel").classList.add("hidden");
+  $("homePanel").classList.remove("hidden");
+  $("joinPanel").classList.add("hidden");
+  $("gamePanel").classList.add("hidden");
+}
+
+function showJoin(mode) {
+  selectedMode = mode === "football" ? "football" : "mafia";
+  $("authPanel").classList.add("hidden");
+  $("homePanel").classList.add("hidden");
+  $("joinPanel").classList.remove("hidden");
+  $("gamePanel").classList.add("hidden");
+  $("selectedModeEyebrow").textContent = selectedMode === "football" ? "Football" : "Mafia";
+  $("selectedModeTitle").textContent = selectedMode === "football" ? "AI 축구" : "마피아";
+  $("selectedModeText").textContent = selectedMode === "football" ? "축구 방을 만들거나 방 코드로 입장하세요." : "마피아 방을 만들거나 방 코드로 입장하세요.";
+  $("createBtn").textContent = selectedMode === "football" ? "축구 방 만들기" : "마피아 방 만들기";
+}
+
+function authSubmit(action) {
+  send(action, {
+    username: $("loginIdInput").value,
+    password: $("loginPwInput").value,
+    remember: $("rememberLogin").checked,
+  });
 }
 
 function render() {
@@ -115,9 +173,11 @@ function render() {
   $("gamePanel").classList.remove("hidden");
 
   const isHost = state.you?.id === state.hostId;
+  const canManage = isHost || state.account?.isAdmin;
+  const isFootball = state.mode === "football";
   const role = state.you?.role;
   $("roomCode").textContent = state.code;
-  $("phaseText").textContent = phaseLabels[state.phase] || state.phase;
+  $("phaseText").textContent = isFootball ? footballPhaseLabel(state.football?.phase) : phaseLabels[state.phase] || state.phase;
   $("winnerText").textContent = state.winnerText || "";
   $("winnerText").classList.toggle("hidden", !state.winnerText);
   $("roleText").textContent = role ? roleLabels[role] : "미정";
@@ -128,12 +188,23 @@ function render() {
   $("progressCount").textContent = `${state.progress?.done || 0}/${state.progress?.needed || 0}`;
 
   $("settingsPanel").classList.toggle("hidden", state.phase !== "lobby");
-  $("startBtn").classList.toggle("hidden", !(isHost && state.phase === "lobby"));
-  $("resetBtn").classList.toggle("hidden", !isHost);
-  setSettingsInputs(isHost);
+  $("startBtn").classList.toggle("hidden", !(canManage && state.phase === "lobby"));
+  $("startBtn").textContent = isFootball ? "베팅 열기" : "게임 시작";
+  $("resetBtn").classList.toggle("hidden", !canManage);
+  $("identityPanel").classList.toggle("hidden", isFootball);
+  $("actionPanel").classList.toggle("hidden", isFootball);
+  $("footballPanel").classList.toggle("hidden", !isFootball);
+  $("mafiaSettingsGrid").classList.toggle("hidden", isFootball);
+  $("footballStartBtn").classList.toggle("hidden", !(canManage && isFootball));
+  document.querySelectorAll(".mode-btn").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === state.mode);
+    button.disabled = !canManage || state.phase !== "lobby";
+  });
+  setSettingsInputs(canManage);
 
   renderPlayers();
-  renderTargets();
+  if (!isFootball) renderTargets();
+  renderFootball();
   renderFeed();
   renderEvent();
 }
@@ -289,6 +360,108 @@ function renderMessages(messages, emptyText) {
     : `<p class="hint">${emptyText}</p>`;
 }
 
+function renderFootball() {
+  if (state.mode !== "football" || !state.football) return;
+  const football = state.football;
+  $("homeTeam").textContent = football.teams?.[0] || "홈팀";
+  $("awayTeam").textContent = football.teams?.[1] || "원정팀";
+  $("homeScore").textContent = football.score?.[0] ?? 0;
+  $("awayScore").textContent = football.score?.[1] ?? 0;
+  $("footballPhase").textContent = footballPhaseLabel(football.phase);
+  $("footballClock").textContent = footballClockText(football);
+  $("footballResult").textContent = football.winnerText || footballSummary(football);
+  renderPitch(football);
+  $("footballWallet").textContent = `${football.wallet ?? 0}`;
+  $("betAmount").max = Math.max(10, football.wallet ?? 0);
+
+  if (football.myBet) {
+    const team = football.myBet.side === "home" ? football.teams[0] : football.teams[1];
+    $("myFootballBet").textContent = `${team} ${football.myBet.amount}P`;
+  } else {
+    $("myFootballBet").textContent = "없음";
+  }
+
+  document.querySelectorAll(".bet-btn").forEach((button) => {
+    button.disabled = football.phase !== "betting";
+    button.classList.toggle("selected", football.myBet?.side === button.dataset.side);
+  });
+  document.querySelectorAll(".direct-btn").forEach((button) => {
+    button.disabled = football.phase !== "running";
+  });
+
+  $("footballEvents").innerHTML = football.events?.length
+    ? football.events.slice().reverse().map((line) => `<div class="football-line ${line.level || ""}">${escapeHtml(line.text)}<span>${timeText(line.at)}</span></div>`).join("")
+    : `<p class="hint">아직 경기 기록이 없습니다.</p>`;
+  $("footballLeaders").innerHTML = football.leaders?.length
+    ? football.leaders.map((player, index) => `<div class="football-line"><b>${index + 1}. ${escapeHtml(player.name)}</b><strong>${player.coins}P</strong></div>`).join("")
+    : `<p class="hint">아직 참가자가 없습니다.</p>`;
+}
+
+function renderPitch(football) {
+  const pitch = $("footballPitch");
+  const ball = $("footballBall");
+  const latest = football.events?.at(-1);
+  const latestId = latest ? `${latest.at}:${latest.text}` : `${football.phase}:idle`;
+  pitch.classList.toggle("is-running", football.phase === "running");
+  pitch.classList.toggle("is-betting", football.phase === "betting");
+  pitch.classList.toggle("is-finished", football.phase === "finished");
+
+  if (latestId !== lastFootballEventId) {
+    lastFootballEventId = latestId;
+    const position = ballPositionFor(football, latest);
+    ball.style.setProperty("--ball-x", `${position.x}%`);
+    ball.style.setProperty("--ball-y", `${position.y}%`);
+    $("playBanner").textContent = pitchBannerText(football, latest);
+    pitch.classList.remove("pitch-hit");
+    void pitch.offsetWidth;
+    pitch.classList.add("pitch-hit");
+  }
+}
+
+function ballPositionFor(football, latest) {
+  if (football.phase === "idle") return { x: 50, y: 50 };
+  if (football.phase === "betting") return { x: 50, y: 50 };
+  if (football.phase === "finished") return football.winner === "home" ? { x: 88, y: 50 } : { x: 12, y: 50 };
+  const text = latest?.text || "";
+  if (text.includes("득점") || text.includes("슈팅")) {
+    return text.includes(football.teams?.[0]) ? { x: 88, y: 48 } : { x: 12, y: 52 };
+  }
+  if (text.includes("수비")) return { x: 50, y: 34 };
+  return {
+    x: 22 + Math.floor(Math.random() * 56),
+    y: 24 + Math.floor(Math.random() * 52),
+  };
+}
+
+function pitchBannerText(football, latest) {
+  if (football.phase === "betting") return "베팅 중";
+  if (football.phase === "running") return latest?.text || "AI 경기 진행 중";
+  if (football.phase === "finished") return football.winnerText || "경기 종료";
+  return "대기 중";
+}
+
+function footballPhaseLabel(phase) {
+  return {
+    idle: "축구 대기",
+    betting: "베팅 중",
+    running: "경기 중",
+    finished: "경기 종료",
+  }[phase] || "축구";
+}
+
+function footballClockText(football) {
+  if (football.phase !== "betting") return football.phase === "running" ? "LIVE" : "--";
+  const left = Math.max(0, Math.ceil((football.betsOpenUntil - Date.now()) / 1000));
+  return `${left}초`;
+}
+
+function footballSummary(football) {
+  if (football.phase === "betting") return `총 베팅 ${football.betCount || 0}명 · 홈 ${football.totals?.home || 0}P / 원정 ${football.totals?.away || 0}P`;
+  if (football.phase === "running") return "AI 경기가 진행 중입니다.";
+  if (football.phase === "finished") return "방장이 다시 베팅을 열 수 있습니다.";
+  return "방장이 베팅을 열면 시작됩니다.";
+}
+
 function renderEvent() {
   const event = state.event;
   if (!event || event.id === lastEventId) return;
@@ -314,6 +487,7 @@ function renderEvent() {
 }
 
 function eventKicker(event) {
+  if (event.kind?.includes("football")) return "FOOTBALL";
   if (event.kind?.includes("vote")) return "VOTE";
   if (event.kind?.includes("murder") || event.tone === "night") return "NIGHT";
   if (event.kind === "execution") return "DAY";
@@ -352,7 +526,7 @@ function leaveLocalRoom() {
   state = null;
   activeTab = "chat";
   $("gamePanel").classList.add("hidden");
-  $("joinPanel").classList.remove("hidden");
+  showHome();
   $("codeInput").value = "";
   toast("방에서 나갔습니다.");
 }
@@ -394,12 +568,29 @@ function initFromUrl() {
   if (savedName) $("nameInput").value = savedName;
 }
 
-$("createBtn").addEventListener("click", () => send("create", { name: nameValue() }));
+$("loginBtn").addEventListener("click", () => authSubmit("authLogin"));
+$("registerBtn").addEventListener("click", () => authSubmit("authRegister"));
+$("checkIdBtn").addEventListener("click", () => send("usernameCheck", { username: $("loginIdInput").value }));
+$("loginIdInput").addEventListener("input", () => {
+  $("idCheckText").textContent = "관리자 로그인: admin / tksxh1357!";
+  $("idCheckText").classList.remove("ok", "bad");
+});
+$("logoutBtn").addEventListener("click", () => {
+  localStorage.removeItem("mafiaAuthToken");
+  sessionStorage.removeItem("mafiaAuthToken");
+  send("authLogout");
+});
+$("backHomeBtn").addEventListener("click", showHome);
+document.querySelectorAll("[data-pick-mode]").forEach((button) => {
+  button.addEventListener("click", () => showJoin(button.dataset.pickMode));
+});
+$("createBtn").addEventListener("click", () => send("create", { mode: selectedMode }));
 $("joinBtn").addEventListener("click", () => {
   autoJoinRoom = null;
-  send("join", { name: nameValue(), code: $("codeInput").value });
+  send("join", { code: $("codeInput").value });
 });
 $("startBtn").addEventListener("click", () => send("start"));
+$("footballStartBtn").addEventListener("click", () => send("start"));
 $("resetBtn").addEventListener("click", () => send("reset"));
 $("leaveBtn").addEventListener("click", () => send("leave"));
 $("copyInviteBtn").addEventListener("click", copyInvite);
@@ -423,10 +614,31 @@ document.querySelectorAll("#settingsPanel input").forEach((input) => {
   });
   input.addEventListener("change", pushSettings);
 });
+document.querySelectorAll(".mode-btn").forEach((button) => {
+  button.addEventListener("click", () => send("mode", { mode: button.dataset.mode }));
+});
+document.querySelectorAll(".bet-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    const amount = $("betAmount").value || 100;
+    button.classList.remove("pulse-pick");
+    void button.offsetWidth;
+    button.classList.add("pulse-pick");
+    send("footballBet", { side: button.dataset.side, amount });
+  });
+});
+document.querySelectorAll(".direct-btn").forEach((button) => {
+  button.addEventListener("click", () => send("footballPlay", { move: button.dataset.move }));
+});
 window.addEventListener("online", connect);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) connect();
 });
+setInterval(() => {
+  if (state?.mode === "football") {
+    $("footballClock").textContent = footballClockText(state.football);
+    $("footballResult").textContent = state.football?.winnerText || footballSummary(state.football);
+  }
+}, 500);
 
 (async () => {
   initFromUrl();
