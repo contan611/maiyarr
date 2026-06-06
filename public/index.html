@@ -27,13 +27,17 @@
             비밀번호
             <input id="loginPwInput" type="password" maxlength="32" placeholder="비밀번호" autocomplete="current-password" />
           </label>
+          <label>
+            게임 표시 이름
+            <input id="displayNameInput" maxlength="16" placeholder="게임에서 보일 이름" autocomplete="nickname" />
+          </label>
           <label class="switch-row">
             <input id="rememberLogin" type="checkbox" checked />
             <span>로그인 기억하기</span>
           </label>
           <button id="loginBtn" class="primary">로그인</button>
           <button id="registerBtn">회원가입</button>
-          <p class="hint" id="idCheckText">관리자 로그인: admin / tksxh1357!</p>
+          <p class="hint" id="idCheckText">아이디와 게임 표시 이름은 따로 사용할 수 있습니다.</p>
         </div>
       </section>
 
@@ -56,6 +60,22 @@
             <p>승자에 베팅하고 경기 중 슈팅/수비로 개입합니다.</p>
           </button>
           <button id="logoutBtn" class="ghost">로그아웃</button>
+          <div class="profile-card">
+            <h3>회원 정보</h3>
+            <label>
+              게임 표시 이름
+              <input id="profileDisplayName" maxlength="16" placeholder="게임에서 보일 이름" />
+            </label>
+            <label>
+              현재 비밀번호
+              <input id="currentPasswordInput" type="password" maxlength="32" placeholder="비밀번호 변경 때만 입력" />
+            </label>
+            <label>
+              새 비밀번호
+              <input id="newPasswordInput" type="password" maxlength="32" placeholder="새 비밀번호" />
+            </label>
+            <button id="saveProfileBtn">회원 정보 저장</button>
+          </div>
         </div>
       </section>
 
