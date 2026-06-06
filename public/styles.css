@@ -149,10 +149,67 @@ label {
   gap: 14px;
 }
 
+.mode-home {
+  display: grid;
+  gap: 12px;
+}
+
+.game-card-btn {
+  min-height: 150px;
+  text-align: left;
+  padding: 18px;
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+
+.game-card-btn span {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.game-card-btn strong {
+  font-size: 30px;
+}
+
+.game-card-btn p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.admin-badge {
+  display: inline-block;
+  width: fit-content;
+  margin-bottom: 10px;
+  border: 1px solid rgba(214, 163, 72, 0.55);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(214, 163, 72, 0.15);
+  color: var(--amber);
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .join-code {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
+}
+
+.check-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+#idCheckText.ok {
+  color: var(--green);
+}
+
+#idCheckText.bad {
+  color: #ff9aa5;
 }
 
 .game {
@@ -260,6 +317,21 @@ h3 {
   gap: 10px;
 }
 
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mode-btn.active,
+.bet-btn.selected {
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 900;
+  background: rgba(47, 185, 142, 0.1);
+}
+
 .setting-item,
 .switch-row {
   background: var(--surface-2);
@@ -292,6 +364,293 @@ h3 {
   grid-template-columns: 0.9fr 1fr 1.15fr;
   gap: 14px;
   align-items: start;
+}
+
+.football-panel {
+  padding: 16px;
+}
+
+.stadium {
+  display: grid;
+  grid-template-columns: 1fr minmax(180px, 0.72fr) 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.team-card,
+.score-board,
+.wallet-box,
+.football-line {
+  background: #151a1d;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.team-card {
+  min-height: 210px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  align-content: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.team-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(255, 255, 255, 0.09) 50%, transparent 51%),
+    repeating-linear-gradient(90deg, rgba(47, 185, 142, 0.1) 0 28px, rgba(47, 185, 142, 0.04) 28px 56px);
+  opacity: 0.55;
+}
+
+.team-card > * {
+  position: relative;
+}
+
+.team-card span,
+.wallet-box span,
+.score-board span,
+.football-line span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.team-card strong {
+  font-size: clamp(22px, 4vw, 34px);
+}
+
+.team-card b {
+  font-size: 56px;
+  line-height: 1;
+}
+
+.score-board {
+  padding: 16px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.score-board strong {
+  font-size: 42px;
+  color: var(--amber);
+}
+
+.score-board p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.pitch-wrap {
+  margin: 12px 0;
+}
+
+.pitch {
+  position: relative;
+  min-height: 310px;
+  border: 2px solid rgba(242, 245, 242, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(242, 245, 242, 0.09) 1px, transparent 1px) 50% 0 / 50% 100% no-repeat,
+    repeating-linear-gradient(90deg, #1d704f 0 70px, #176646 70px 140px);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.24), var(--shadow);
+}
+
+.pitch::before,
+.pitch::after {
+  content: "";
+  position: absolute;
+  top: 23%;
+  bottom: 23%;
+  width: 11%;
+  border: 2px solid rgba(242, 245, 242, 0.35);
+}
+
+.pitch::before {
+  left: -2px;
+  border-left: 0;
+}
+
+.pitch::after {
+  right: -2px;
+  border-right: 0;
+}
+
+.center-line {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(242, 245, 242, 0.28);
+}
+
+.pitch-circle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 98px;
+  aspect-ratio: 1;
+  border: 2px solid rgba(242, 245, 242, 0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.goal {
+  position: absolute;
+  top: 40%;
+  width: 10px;
+  height: 20%;
+  border: 2px solid rgba(242, 245, 242, 0.42);
+  background: rgba(242, 245, 242, 0.08);
+}
+
+.goal-left {
+  left: 0;
+  border-left: 0;
+}
+
+.goal-right {
+  right: 0;
+  border-right: 0;
+}
+
+.player-dot,
+.ball {
+  position: absolute;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.player-dot {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.28);
+  animation: player-run 2.4s ease-in-out infinite;
+}
+
+.player-dot.home {
+  background: var(--red);
+}
+
+.player-dot.away {
+  background: var(--blue);
+}
+
+.player-dot.p1 { left: 20%; top: 33%; animation-delay: -0.2s; }
+.player-dot.p2 { left: 32%; top: 58%; animation-delay: -0.7s; }
+.player-dot.p3 { left: 42%; top: 42%; animation-delay: -1.1s; }
+.player-dot.p4 { left: 80%; top: 67%; animation-delay: -0.3s; }
+.player-dot.p5 { left: 68%; top: 42%; animation-delay: -0.8s; }
+.player-dot.p6 { left: 58%; top: 58%; animation-delay: -1.3s; }
+
+.ball {
+  --ball-x: 50%;
+  --ball-y: 50%;
+  left: var(--ball-x);
+  top: var(--ball-y);
+  width: 18px;
+  height: 18px;
+  background: radial-gradient(circle at 32% 28%, #fff 0 28%, #d9dedb 29% 58%, #101315 60% 70%, #fff 72%);
+  box-shadow: 0 7px 16px rgba(0, 0, 0, 0.42);
+  transition: left 0.55s cubic-bezier(0.2, 0.9, 0.2, 1), top 0.55s cubic-bezier(0.2, 0.9, 0.2, 1);
+  z-index: 3;
+}
+
+.pitch.is-running .ball {
+  animation: ball-spin 0.8s linear infinite;
+}
+
+.play-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  max-width: calc(100% - 28px);
+  transform: translateX(-50%);
+  border: 1px solid rgba(242, 245, 242, 0.2);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(17, 19, 21, 0.82);
+  color: var(--ink);
+  font-weight: 800;
+  text-align: center;
+  z-index: 4;
+}
+
+.pitch.pitch-hit .play-banner {
+  animation: banner-pop 0.5s ease;
+}
+
+.pitch.pitch-hit .ball {
+  animation: ball-kick 0.5s ease;
+}
+
+.bet-strip {
+  display: grid;
+  grid-template-columns: 1fr 0.7fr 1fr;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.direct-controls {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.direct-controls span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.wallet-box {
+  padding: 11px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+}
+
+.wallet-box strong {
+  font-size: 22px;
+}
+
+.football-grid {
+  display: grid;
+  grid-template-columns: 1fr 0.72fr;
+  gap: 12px;
+}
+
+.football-events {
+  display: grid;
+  gap: 8px;
+}
+
+.football-line {
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  line-height: 1.4;
+}
+
+.football-line.success {
+  border-color: rgba(47, 185, 142, 0.5);
+}
+
+.football-line.phase,
+.football-line.bet {
+  border-color: rgba(214, 163, 72, 0.45);
 }
 
 .players,
@@ -389,6 +748,10 @@ h3 {
 }
 
 .target-row.pulse-pick {
+  animation: pick-pulse 0.46s ease;
+}
+
+button.pulse-pick {
   animation: pick-pulse 0.46s ease;
 }
 
@@ -610,6 +973,44 @@ body.flash-info::after {
   }
 }
 
+@keyframes player-run {
+  0%, 100% {
+    margin: 0;
+  }
+  50% {
+    margin: -8px 10px 0 -6px;
+  }
+}
+
+@keyframes ball-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes ball-kick {
+  0% {
+    scale: 1;
+  }
+  45% {
+    scale: 1.45;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+@keyframes banner-pop {
+  0% {
+    transform: translateX(-50%) translateY(8px);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
 @media (max-width: 960px) {
   .join-screen,
   .board {
@@ -637,6 +1038,21 @@ body.flash-info::after {
   .settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .stadium,
+  .bet-strip,
+  .direct-controls,
+  .football-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-card {
+    min-height: 170px;
+  }
+
+  .pitch {
+    min-height: 260px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -657,6 +1073,7 @@ body.flash-info::after {
 
   .settings-grid,
   .join-code,
+  .check-row,
   .chat-form {
     grid-template-columns: 1fr;
   }
@@ -682,5 +1099,14 @@ body.flash-info::after {
 
   .scroll-view {
     height: min(42vh, 300px);
+  }
+
+  .pitch {
+    min-height: 220px;
+  }
+
+  .player-dot {
+    width: 20px;
+    height: 20px;
   }
 }
