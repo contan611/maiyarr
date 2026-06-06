@@ -625,12 +625,17 @@ function runFootballMatch(code, matchId) {
   addEvent(room, "football-start", "킥오프", `${room.football.teams[0]} vs ${room.football.teams[1]} 경기가 시작됐습니다.`, "success");
   broadcast(room);
 
-  const moments = [
-    "중원에서 강한 압박이 들어갑니다.",
-    "골키퍼가 슈퍼 세이브를 보여줍니다.",
-    "측면 돌파 후 크로스가 올라갑니다.",
-    "관중석이 술렁입니다. 결정적인 찬스!",
-  ];
+  const [home, away] = room.football.teams;
+  const moments = shuffle([
+    `${home}의 2선 미드필더가 전방 압박을 풀고 침투 패스를 찔러 넣습니다.`,
+    `${away} 골키퍼가 각도를 좁히며 낮게 깔린 슈팅을 쳐냅니다.`,
+    `${home} 윙어가 터치라인을 따라 질주한 뒤 박스 안으로 날카로운 크로스를 올립니다.`,
+    `${away} 수비수가 몸을 던져 컷백 패스를 끊어냅니다. 위험한 장면이었습니다.`,
+    `${away}가 짧은 패스 4번으로 중원을 통과합니다. 관중석이 술렁입니다.`,
+    `${home} 스트라이커가 수비 뒷공간으로 빠져나가며 1대1 찬스를 만듭니다.`,
+    `심판이 어드밴티지를 선언합니다. 경기가 끊기지 않고 빠르게 이어집니다.`,
+    `${away}의 코너킥, 니어포스트로 쇄도했지만 헤더가 골문을 살짝 벗어납니다.`,
+  ]).slice(0, 5);
   moments.forEach((text, index) => {
     room.footballTimers.push(setTimeout(() => {
       const current = rooms.get(code);
@@ -653,12 +658,12 @@ function footballDirectPlay(room, player, move) {
   room.footballDirectActions.set(player.id, used + 1);
   if (move === "shoot" && Math.random() < 0.3) {
     room.football.score[index] += 1;
-    addFootballEvent(room, `${player.name} 님의 직접 슈팅! ${team} 득점입니다.`, "success");
-    addEvent(room, "football-goal", "GOAL", `${team} 득점! ${player.name} 님의 직접 플레이가 통했습니다.`, "success");
+    addFootballEvent(room, `${player.name} 님이 타이밍을 잡아 직접 슈팅 지시! 공이 골키퍼 손끝을 스치고 들어갑니다. ${team} 득점!`, "success");
+    addEvent(room, "football-goal", "GOAL", `${team} 득점! ${player.name} 님의 직접 슈팅 지시가 통했습니다.`, "success");
   } else if (move === "defend" && Math.random() < 0.45) {
-    addFootballEvent(room, `${player.name} 님의 수비 지시가 상대 공격을 막았습니다.`, "phase");
+    addFootballEvent(room, `${player.name} 님의 직접 수비 지시! 센터백이 라인을 맞추며 상대 침투를 오프사이드로 몰아넣었습니다.`, "phase");
   } else {
-    addFootballEvent(room, `${player.name} 님의 직접 플레이가 아쉽게 빗나갔습니다.`, "info");
+    addFootballEvent(room, `${player.name} 님이 직접 ${move === "shoot" ? "슈팅" : "수비"}를 지시했지만 타이밍이 조금 늦었습니다.`, "info");
   }
   return true;
 }
@@ -906,6 +911,12 @@ function handleAction(id, message) {
     }
     users.set(user.id, user);
     saveUsers();
+    for (const roomToUpdate of rooms.values()) {
+      for (const playerToUpdate of roomToUpdate.players.values()) {
+        if (playerToUpdate.accountId === user.id) playerToUpdate.name = displayName;
+      }
+      broadcast(roomToUpdate);
+    }
     return send(client.socket, { type: "auth", user: publicUser(user), sessionToken: createSession(user.id) });
   }
 
