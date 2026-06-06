@@ -9,22 +9,73 @@
   </head>
   <body>
     <main class="app">
-      <section class="join-screen" id="joinPanel">
+      <section class="join-screen" id="authPanel">
         <div class="brand-block">
-          <p class="eyebrow">Mafia</p>
+          <p class="eyebrow">Game Hub</p>
           <h1>마피아</h1>
-          <p class="sub">폰, 패드, PC에서 방 코드로 접속해 바로 플레이하세요.</p>
+          <p class="sub">계정으로 로그인하고 마피아 또는 AI 축구를 따로 선택하세요.</p>
         </div>
         <div class="join-card">
           <label>
-            닉네임
-            <input id="nameInput" maxlength="16" placeholder="예: 2반 민준" autocomplete="nickname" />
+            아이디
+            <div class="check-row">
+              <input id="loginIdInput" maxlength="16" placeholder="아이디" autocomplete="username" />
+              <button id="checkIdBtn" type="button">중복 확인</button>
+            </div>
+          </label>
+          <label>
+            비밀번호
+            <input id="loginPwInput" type="password" maxlength="32" placeholder="비밀번호" autocomplete="current-password" />
+          </label>
+          <label class="switch-row">
+            <input id="rememberLogin" type="checkbox" checked />
+            <span>로그인 기억하기</span>
+          </label>
+          <button id="loginBtn" class="primary">로그인</button>
+          <button id="registerBtn">회원가입</button>
+          <p class="hint" id="idCheckText">관리자 로그인: admin / tksxh1357!</p>
+        </div>
+      </section>
+
+      <section class="join-screen hidden" id="homePanel">
+        <div class="brand-block">
+          <p class="eyebrow">Choose Game</p>
+          <h1 id="homeTitle">게임 선택</h1>
+          <div id="adminBadge" class="admin-badge hidden">관리자</div>
+          <p class="sub">마피아와 AI 축구는 첫 화면에서 완전히 따로 들어갑니다.</p>
+        </div>
+        <div class="mode-home">
+          <button class="game-card-btn" data-pick-mode="mafia">
+            <span>추리</span>
+            <strong>마피아</strong>
+            <p>직업을 받고 낮/밤 투표로 진행합니다.</p>
+          </button>
+          <button class="game-card-btn" data-pick-mode="football">
+            <span>베팅 / 직접 플레이</span>
+            <strong>AI 축구</strong>
+            <p>승자에 베팅하고 경기 중 슈팅/수비로 개입합니다.</p>
+          </button>
+          <button id="logoutBtn" class="ghost">로그아웃</button>
+        </div>
+      </section>
+
+      <section class="join-screen hidden" id="joinPanel">
+        <div class="brand-block">
+          <p class="eyebrow" id="selectedModeEyebrow">Mafia</p>
+          <h1 id="selectedModeTitle">마피아</h1>
+          <p class="sub" id="selectedModeText">방 코드로 친구들과 접속하세요.</p>
+        </div>
+        <div class="join-card">
+          <label>
+            계정
+            <input id="nameInput" maxlength="16" autocomplete="nickname" disabled />
           </label>
           <button id="createBtn" class="primary">방 만들기</button>
           <div class="join-code">
             <input id="codeInput" maxlength="4" placeholder="방 코드" autocomplete="off" inputmode="latin" />
             <button id="joinBtn">입장</button>
           </div>
+          <button id="backHomeBtn" class="ghost">게임 선택으로</button>
           <p class="hint" id="serverHint"></p>
         </div>
       </section>
@@ -47,7 +98,7 @@
           </div>
         </header>
 
-        <section class="identity">
+        <section class="identity" id="identityPanel">
           <div>
             <span>내 역할</span>
             <strong id="roleText">미정</strong>
@@ -63,12 +114,12 @@
         <section class="lobby-settings panel" id="settingsPanel">
           <div class="panel-head">
             <div>
-              <h3>방 설정</h3>
-              <p class="hint">기본은 시민 + 마피아입니다. 특수직은 원하는 만큼 켜세요.</p>
+              <h3 id="settingsTitle">방 설정</h3>
+              <p class="hint" id="settingsHint">마피아는 직업을 정하고, 축구는 경기 규칙을 고릅니다.</p>
             </div>
             <button id="startBtn" class="primary hidden">게임 시작</button>
           </div>
-          <div class="settings-grid">
+          <div class="settings-grid" id="mafiaSettingsGrid">
             <label class="setting-item">
               <span>마피아 수</span>
               <input id="mafiaCount" type="number" min="1" max="8" value="1" />
@@ -100,6 +151,80 @@
           </div>
         </section>
 
+        <section class="football-panel panel hidden" id="footballPanel">
+          <div class="panel-head">
+            <div>
+              <h3>AI 축구</h3>
+              <p class="hint">베팅 후 AI 경기가 시작됩니다. 경기 중 직접 슈팅/수비로 개입할 수 있습니다.</p>
+            </div>
+            <button id="footballStartBtn" class="primary hidden">베팅 열기</button>
+          </div>
+          <div class="stadium">
+            <div class="team-card home">
+              <span>HOME</span>
+              <strong id="homeTeam">홈팀</strong>
+              <b id="homeScore">0</b>
+              <button class="bet-btn" data-side="home">홈 승리</button>
+            </div>
+            <div class="score-board">
+              <span id="footballPhase">대기</span>
+              <strong id="footballClock">--</strong>
+              <p id="footballResult">방장이 베팅을 열면 시작됩니다.</p>
+            </div>
+            <div class="team-card away">
+              <span>AWAY</span>
+              <strong id="awayTeam">원정팀</strong>
+              <b id="awayScore">0</b>
+              <button class="bet-btn" data-side="away">원정 승리</button>
+            </div>
+          </div>
+          <div class="pitch-wrap">
+            <div class="pitch" id="footballPitch">
+              <div class="pitch-line center-line"></div>
+              <div class="pitch-circle"></div>
+              <div class="goal goal-left"></div>
+              <div class="goal goal-right"></div>
+              <div class="player-dot home p1"></div>
+              <div class="player-dot home p2"></div>
+              <div class="player-dot home p3"></div>
+              <div class="player-dot away p4"></div>
+              <div class="player-dot away p5"></div>
+              <div class="player-dot away p6"></div>
+              <div class="ball" id="footballBall"></div>
+              <div class="play-banner" id="playBanner">대기 중</div>
+            </div>
+          </div>
+          <div class="bet-strip">
+            <label>
+              베팅 포인트
+              <input id="betAmount" type="number" min="10" step="10" value="100" />
+            </label>
+            <div class="wallet-box">
+              <span>내 포인트</span>
+              <strong id="footballWallet">1000</strong>
+            </div>
+            <div class="wallet-box">
+              <span>내 베팅</span>
+              <strong id="myFootballBet">없음</strong>
+            </div>
+          </div>
+          <div class="direct-controls">
+            <button class="direct-btn" data-move="shoot">직접 슈팅</button>
+            <button class="direct-btn" data-move="defend">직접 수비</button>
+            <span>경기 중 1인 4회까지 반영됩니다.</span>
+          </div>
+          <div class="football-grid">
+            <div>
+              <h3>경기 기록</h3>
+              <div id="footballEvents" class="football-events"></div>
+            </div>
+            <div>
+              <h3>랭킹</h3>
+              <div id="footballLeaders" class="football-events"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="board">
           <div class="panel players">
             <div class="panel-head">
@@ -109,7 +234,7 @@
             <div id="playersList" class="players-list"></div>
           </div>
 
-          <div class="panel action">
+          <div class="panel action" id="actionPanel">
             <div class="panel-head">
               <h3>대상 선택</h3>
               <span id="actionMode" class="chip">대기</span>
