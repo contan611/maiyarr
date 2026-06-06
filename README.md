@@ -1,37 +1,59 @@
-# 마피아 서버
+# 마피아 / AI 축구 서버
 
-## 실행
+마피아와 AI 축구 베팅을 같은 서버에서 실행하는 웹 게임입니다.
 
-`START_MAFIA_SERVER.bat`을 더블클릭하세요.
+## 로컬 실행
 
-자동으로 열립니다:
+`START_MAFIA_SERVER.bat`을 실행하면 로컬 서버가 열립니다.
 
-- 게임 화면
-- `CONNECT_ADDRESS.html` 접속 안내 페이지
+주소:
 
-## 다른 기기 접속
+```text
+http://127.0.0.1:8787
+```
 
-1. 모든 기기를 같은 Wi-Fi에 연결합니다.
-2. `CONNECT_ADDRESS.html`에 나온 주소를 폰/패드/다른 컴퓨터 브라우저에 입력합니다.
-3. QR 코드가 보이면 폰으로 스캔해도 됩니다.
-4. 방을 만들고 방 코드나 초대 링크를 공유합니다.
-
-## 방 나가기
-
-게임 화면 오른쪽 위의 `방 나가기` 버튼을 누르면 방에서 나갑니다.
-
-방장이 나가면 다음 참가자가 자동으로 방장이 됩니다.
-
-## 폰/패드끼리만 하기
-
-폰/패드끼리만 하려면 Render 같은 온라인 서버에 배포해야 합니다.
+## 온라인 배포
 
 Render 설정:
 
-- Build Command: `npm install`
+- Build Command: 비워두거나 `npm install`
 - Start Command: `node server.js`
-- Root Directory: `package.json`과 `server.js`가 있는 폴더
+- Root Directory: 비워두기
 
-## 서버 끄기
+저장소 루트 구조:
 
-`STOP_MAFIA_SERVER.bat`을 실행하세요.
+```text
+server.js
+package.json
+render.yaml
+README.md
+public/
+  index.html
+  app.js
+  styles.css
+```
+
+## 자동 배포
+
+한 번만 `SETUP_AUTO_DEPLOY.bat`을 실행해서 GitHub 토큰, 저장소, 브랜치를 저장하세요.
+
+그 다음부터는:
+
+- `DEPLOY_NOW.bat`: 지금 파일을 GitHub에 바로 업로드합니다.
+- `WATCH_AUTO_DEPLOY.bat`: 켜두면 파일이 바뀔 때 자동으로 GitHub에 업로드합니다.
+
+Render가 GitHub 저장소와 연결되어 있고 Auto Deploy가 켜져 있으면 GitHub 업로드 후 웹 서버에 자동 반영됩니다.
+
+주의:
+
+- `.deploy` 폴더에는 암호화된 GitHub 토큰이 들어가므로 GitHub에 올리지 마세요.
+- `data/users.json`은 계정 데이터라서 GitHub에 올리지 마세요.
+
+## 관리자 로그인
+
+```text
+아이디: admin
+비밀번호: tksxh1357!
+```
+
+서버 시작 시 `admin` 계정은 자동 생성되고 관리자 권한이 부여됩니다.
