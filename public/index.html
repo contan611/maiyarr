@@ -59,6 +59,16 @@
             <strong>AI 축구</strong>
             <p>승자에 베팅하고 경기 중 슈팅/수비로 개입합니다.</p>
           </button>
+          <button class="game-card-btn" data-pick-mode="directFootball">
+            <span>직접 플레이</span>
+            <strong>직접 축구</strong>
+            <p>사람이 부족하면 AI가 들어오고 슈팅/수비로 개입합니다.</p>
+          </button>
+          <button class="game-card-btn" data-pick-mode="mini">
+            <span>포인트 게임</span>
+            <strong>미니게임</strong>
+            <p>동전, 주사위, 숫자, 룰렛으로 포인트를 굴립니다.</p>
+          </button>
           <button id="logoutBtn" class="ghost">로그아웃</button>
           <div class="profile-card">
             <h3>회원 정보</h3>
@@ -75,6 +85,12 @@
               <input id="newPasswordInput" type="password" maxlength="32" placeholder="새 비밀번호" />
             </label>
             <button id="saveProfileBtn">회원 정보 저장</button>
+          </div>
+          <div class="profile-card feedback-card">
+            <h3>피드백</h3>
+            <textarea id="feedbackInput" maxlength="600" placeholder="버그나 원하는 기능을 적으면 관리자에게 전달됩니다."></textarea>
+            <button id="sendFeedbackBtn">관리자에게 보내기</button>
+            <div id="adminFeedbackBox" class="admin-feedback hidden"></div>
           </div>
         </div>
       </section>
@@ -243,6 +259,38 @@
               <div id="footballLeaders" class="football-events"></div>
             </div>
           </div>
+        </section>
+
+        <section class="mini-panel panel hidden" id="miniPanel">
+          <div class="panel-head">
+            <div>
+              <h3>미니게임</h3>
+              <p class="hint">포인트를 걸고 짧은 게임을 진행합니다. 결과는 방 참가자에게 함께 표시됩니다.</p>
+            </div>
+            <div class="wallet-box">
+              <span>내 포인트</span>
+              <strong id="miniWallet">1000</strong>
+            </div>
+          </div>
+          <div class="mini-controls">
+            <label>
+              베팅 포인트
+              <input id="miniAmount" type="number" min="10" step="10" value="100" />
+            </label>
+            <button class="mini-btn" data-game="coin" data-choice="front">동전 앞면</button>
+            <button class="mini-btn" data-game="coin" data-choice="back">동전 뒷면</button>
+            <button class="mini-btn" data-game="dice" data-choice="odd">주사위 홀</button>
+            <button class="mini-btn" data-game="dice" data-choice="even">주사위 짝</button>
+            <button class="mini-btn" data-game="number" data-choice="1">숫자 1</button>
+            <button class="mini-btn" data-game="number" data-choice="2">숫자 2</button>
+            <button class="mini-btn" data-game="number" data-choice="3">숫자 3</button>
+            <button class="mini-btn" data-game="number" data-choice="4">숫자 4</button>
+            <button class="mini-btn" data-game="number" data-choice="5">숫자 5</button>
+            <button class="mini-btn" data-game="roulette" data-choice="red">룰렛 빨강</button>
+            <button class="mini-btn" data-game="roulette" data-choice="black">룰렛 검정</button>
+            <button class="mini-btn jackpot" data-game="roulette" data-choice="green">룰렛 초록</button>
+          </div>
+          <div id="miniEvents" class="football-events"></div>
         </section>
 
         <section class="board">
