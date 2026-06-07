@@ -1,56 +1,35 @@
-# 마피아 / AI 축구 서버
+# 마피아
 
-마피아와 AI 축구 베팅을 같은 서버에서 실행하는 웹 게임입니다.
+마피아, AI 축구 베팅, 직접 축구, 미니게임을 같은 서버에서 실행하는 웹 게임입니다.
 
-## 로컬 실행
+## 실행
 
-`START_MAFIA_SERVER.bat`을 실행하면 로컬 서버가 열립니다.
-
-주소:
+Windows에서는 `START_MAFIA_SERVER.bat`를 실행하면 로컬 서버가 열립니다.
 
 ```text
 http://127.0.0.1:8787
 ```
 
-## 온라인 배포
+Render 배포 설정:
 
-Render 설정:
-
-- Build Command: 비워두거나 `npm install`
+- Build Command: `npm install`
 - Start Command: `node server.js`
 - Root Directory: 비워두기
 
-저장소 루트 구조:
+## 계정
 
-```text
-server.js
-package.json
-render.yaml
-README.md
-public/
-  index.html
-  app.js
-  styles.css
-```
+서버 시작 시 기본 관리자 계정이 생성됩니다.
+
+- 아이디: `admin`
+- 표시 닉네임: `운영자`
+
+사용자 계정 데이터는 `data/users.json`에 저장되며 GitHub에는 올리지 않습니다.
 
 ## 자동 배포
 
-한 번만 `SETUP_AUTO_DEPLOY.bat`을 실행해서 GitHub 토큰, 저장소, 브랜치를 저장하세요.
-
-그 다음부터는:
-
-- `DEPLOY_NOW.bat`: 지금 파일을 GitHub에 바로 업로드합니다.
-- `WATCH_AUTO_DEPLOY.bat`: 켜두면 파일이 바뀔 때 자동으로 GitHub에 업로드합니다.
-
-Render가 GitHub 저장소와 연결되어 있고 Auto Deploy가 켜져 있으면 GitHub 업로드 후 웹 서버에 자동 반영됩니다.
+`DEPLOY_NOW.bat`를 실행하면 현재 파일을 GitHub에 바로 업로드합니다. Render에서 Auto Deploy가 켜져 있으면 업로드 후 웹 링크에도 자동 반영됩니다.
 
 주의:
 
-- `.deploy` 폴더에는 암호화된 GitHub 토큰이 들어가므로 GitHub에 올리지 마세요.
-- `data/users.json`은 계정 데이터라서 GitHub에 올리지 마세요.
-
-## 관리자
-
-처음 가입한 계정은 관리자 권한을 받습니다.
-
-추가 관리자 계정이 필요하면 Render 환경 변수 `ADMIN_USERS`에 관리자 아이디를 쉼표로 구분해 넣으세요.
+- `.deploy/` 폴더는 GitHub 토큰이 들어 있으므로 올리지 않습니다.
+- `data/` 폴더는 계정 데이터가 들어 있으므로 올리지 않습니다.
