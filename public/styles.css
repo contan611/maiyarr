@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: dark;
   --bg: #111315;
   --surface: #191d21;
@@ -559,12 +559,16 @@ h3 {
   background: var(--blue);
 }
 
-.player-dot.p1 { left: 20%; top: 33%; animation-delay: -0.2s; }
-.player-dot.p2 { left: 32%; top: 58%; animation-delay: -0.7s; }
-.player-dot.p3 { left: 42%; top: 42%; animation-delay: -1.1s; }
-.player-dot.p4 { left: 80%; top: 67%; animation-delay: -0.3s; }
-.player-dot.p5 { left: 68%; top: 42%; animation-delay: -0.8s; }
-.player-dot.p6 { left: 58%; top: 58%; animation-delay: -1.3s; }
+.player-dot.p1 { left: var(--p1x, 20%); top: var(--p1y, 33%); animation-delay: -0.2s; }
+.player-dot.p2 { left: var(--p2x, 32%); top: var(--p2y, 58%); animation-delay: -0.7s; }
+.player-dot.p3 { left: var(--p3x, 42%); top: var(--p3y, 42%); animation-delay: -1.1s; }
+.player-dot.p4 { left: var(--p4x, 80%); top: var(--p4y, 67%); animation-delay: -0.3s; }
+.player-dot.p5 { left: var(--p5x, 68%); top: var(--p5y, 42%); animation-delay: -0.8s; }
+.player-dot.p6 { left: var(--p6x, 58%); top: var(--p6y, 58%); animation-delay: -1.3s; }
+
+.pitch.is-running .player-dot {
+  transition: left 0.65s cubic-bezier(0.2, 0.9, 0.2, 1), top 0.65s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
 
 .ball {
   --ball-x: 50%;
@@ -607,6 +611,19 @@ h3 {
   animation: ball-kick 0.5s ease;
 }
 
+.pitch.is-goal {
+  box-shadow: inset 0 0 0 3px rgba(255, 214, 102, 0.34), 0 18px 55px rgba(255, 214, 102, 0.22);
+}
+
+.pitch.is-goal .goal {
+  background: rgba(255, 214, 102, 0.28);
+  box-shadow: 0 0 24px rgba(255, 214, 102, 0.58);
+}
+
+.pitch.is-save .ball {
+  animation: ball-save 0.58s ease;
+}
+
 .bet-strip {
   display: grid;
   grid-template-columns: 1fr 0.7fr 1fr;
@@ -614,18 +631,6 @@ h3 {
   margin: 12px 0;
 }
 
-.direct-controls {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.direct-controls span {
-  color: var(--muted);
-  font-size: 13px;
-}
 
 .wallet-box {
   padding: 11px;
@@ -874,7 +879,7 @@ button.pulse-pick {
 
 .chat-form {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(92px, 0.35fr) 1fr auto;
   gap: 8px;
   margin-top: 12px;
 }
@@ -1058,6 +1063,21 @@ body.flash-info::after {
   }
 }
 
+@keyframes ball-save {
+  0% {
+    scale: 1;
+    filter: brightness(1);
+  }
+  45% {
+    scale: 1.32;
+    filter: brightness(1.8);
+  }
+  100% {
+    scale: 1;
+    filter: brightness(1);
+  }
+}
+
 @keyframes banner-pop {
   0% {
     transform: translateX(-50%) translateY(8px);
@@ -1099,7 +1119,6 @@ body.flash-info::after {
 
   .stadium,
   .bet-strip,
-  .direct-controls,
   .football-grid {
     grid-template-columns: 1fr;
   }
@@ -1168,3 +1187,4 @@ body.flash-info::after {
     height: 20px;
   }
 }
+
