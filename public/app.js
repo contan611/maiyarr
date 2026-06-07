@@ -1,4 +1,4 @@
-const $ = (id) => document.getElementById(id);
+﻿const $ = (id) => document.getElementById(id);
 
 const roleLabels = {
   mafia: "마피아",
@@ -136,6 +136,7 @@ function setAccount(user) {
   $("homeTitle").textContent = user ? `${user.displayName || user.username} 님, 게임 선택` : "게임 선택";
   $("adminBadge").classList.toggle("hidden", !user?.isAdmin);
   $("adminFeedbackBox")?.classList.toggle("hidden", !user?.isAdmin);
+  $("deleteAccountBtn")?.classList.toggle("hidden", Boolean(user?.isAdmin));
   if (user?.isAdmin) send("feedbackList");
 }
 
@@ -156,7 +157,7 @@ function showHome() {
 }
 
 function showJoin(mode) {
-  selectedMode = ["mafia", "football", "directFootball", "mini"].includes(mode) ? mode : "mafia";
+  selectedMode = ["mafia", "football", "mini"].includes(mode) ? mode : "mafia";
   $("authPanel").classList.add("hidden");
   $("homePanel").classList.add("hidden");
   $("joinPanel").classList.remove("hidden");
@@ -164,7 +165,6 @@ function showJoin(mode) {
   const labels = {
     mafia: ["Mafia", "마피아", "마피아 방을 만들거나 방 코드로 입장하세요.", "마피아 방 만들기"],
     football: ["Football Bet", "AI 축구 베팅", "AI 축구 베팅 방을 만들거나 방 코드로 입장하세요.", "축구 베팅 방 만들기"],
-    directFootball: ["Direct Football", "직접 축구", "직접 축구 방을 만들거나 방 코드로 입장하세요.", "직접 축구 방 만들기"],
     mini: ["Mini Games", "미니게임", "미니게임 방을 만들거나 방 코드로 입장하세요.", "미니게임 방 만들기"],
   };
   const label = labels[selectedMode];
@@ -193,6 +193,14 @@ function saveProfile() {
   $("newPasswordInput").value = "";
 }
 
+function deleteAccount() {
+  if (!account || account.isAdmin) return toast("운영자 계정은 삭제할 수 없습니다.");
+  const password = $("currentPasswordInput").value;
+  if (!password) return toast("탈퇴하려면 현재 비밀번호를 입력하세요.");
+  if (!confirm("정말 계정을 탈퇴할까요? 이 계정 데이터는 삭제됩니다.")) return;
+  send("accountDelete", { password });
+}
+
 function render() {
   if (!state) return;
   $("joinPanel").classList.add("hidden");
@@ -200,7 +208,7 @@ function render() {
 
   const isHost = state.you?.id === state.hostId;
   const canManage = isHost || state.account?.isAdmin;
-  const isFootball = state.mode === "football" || state.mode === "directFootball";
+  const isFootball = state.mode === "football";
   const isMini = state.mode === "mini";
   const role = state.you?.role;
   $("roomCode").textContent = state.code;
@@ -216,7 +224,7 @@ function render() {
 
   $("settingsPanel").classList.toggle("hidden", state.phase !== "lobby");
   $("startBtn").classList.toggle("hidden", !(canManage && state.phase === "lobby"));
-  $("startBtn").textContent = state.mode === "football" ? "베팅 열기" : state.mode === "directFootball" ? "직접 축구 시작" : "게임 시작";
+  $("startBtn").textContent = state.mode === "football" ? "베팅 열기" : "게임 시작";
   $("resetBtn").classList.toggle("hidden", !canManage);
   $("identityPanel").classList.toggle("hidden", isFootball || isMini);
   $("actionPanel").classList.toggle("hidden", isFootball || isMini);
@@ -231,6 +239,7 @@ function render() {
   setSettingsInputs(canManage);
 
   renderPlayers();
+  renderPrivateTargets();
   if (!isFootball && !isMini) renderTargets();
   renderFootball();
   renderMini();
@@ -287,6 +296,19 @@ function renderPlayers() {
       `;
     })
     .join("");
+}
+
+function renderPrivateTargets() {
+  const select = $("privateTargetSelect");
+  if (!select || !state?.players) return;
+  const current = select.value;
+  const options = [`<option value="">전체</option>`].concat(
+    state.players
+      .filter((player) => player.id !== state.you?.id)
+      .map((player) => `<option value="${player.id}">${escapeHtml(player.name)}</option>`),
+  );
+  select.innerHTML = options.join("");
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
 }
 
 function renderTargets() {
@@ -390,7 +412,7 @@ function renderMessages(messages, emptyText) {
 }
 
 function renderFootball() {
-  if (!["football", "directFootball"].includes(state.mode) || !state.football) return;
+  if (state.mode !== "football" || !state.football) return;
   const football = state.football;
   $("homeTeam").textContent = football.teams?.[0] || "홈팀";
   $("awayTeam").textContent = football.teams?.[1] || "원정팀";
@@ -400,9 +422,9 @@ function renderFootball() {
   $("footballClock").textContent = footballClockText(football);
   $("footballResult").textContent = football.winnerText || footballSummary(football);
   renderPitch(football);
-  $("footballWallet").textContent = `${football.wallet ?? 0}`;
-  $("betAmount").max = Math.max(10, football.wallet ?? 0);
-  document.querySelector(".bet-strip")?.classList.toggle("hidden", state.mode === "directFootball");
+  $("footballWallet").textContent = football.isAdminWallet ? "∞" : `${football.wallet ?? 0}`;
+  $("betAmount").max = football.isAdminWallet ? 1000000 : Math.max(10, football.wallet ?? 0);
+  document.querySelector(".bet-strip")?.classList.remove("hidden");
 
   if (football.myBet) {
     const team = football.myBet.side === "home" ? football.teams[0] : football.teams[1];
@@ -415,9 +437,6 @@ function renderFootball() {
     button.disabled = state.mode !== "football" || football.phase !== "betting";
     button.classList.toggle("selected", football.myBet?.side === button.dataset.side);
   });
-  document.querySelectorAll(".direct-btn").forEach((button) => {
-    button.disabled = football.phase !== "running";
-  });
 
   $("footballEvents").innerHTML = football.events?.length
     ? football.events.slice().reverse().map((line) => `<div class="football-line ${line.level || ""}">${escapeHtml(line.text)}<span>${timeText(line.at)}</span></div>`).join("")
@@ -429,8 +448,8 @@ function renderFootball() {
 
 function renderMini() {
   if (state.mode !== "mini" || !state.mini) return;
-  $("miniWallet").textContent = `${state.mini.wallet ?? 0}`;
-  $("miniAmount").max = Math.max(10, state.mini.wallet ?? 0);
+  $("miniWallet").textContent = state.mini.isAdminWallet ? "∞" : `${state.mini.wallet ?? 0}`;
+  $("miniAmount").max = state.mini.isAdminWallet ? 1000000 : Math.max(10, state.mini.wallet ?? 0);
   $("miniEvents").innerHTML = state.mini.events?.length
     ? state.mini.events.slice().reverse().map((line) => `<div class="football-line ${line.level || ""}">${escapeHtml(line.text)}<span>${timeText(line.at)}</span></div>`).join("")
     : `<p class="hint">아직 미니게임 기록이 없습니다.</p>`;
@@ -444,12 +463,15 @@ function renderPitch(football) {
   pitch.classList.toggle("is-running", football.phase === "running");
   pitch.classList.toggle("is-betting", football.phase === "betting");
   pitch.classList.toggle("is-finished", football.phase === "finished");
+  pitch.classList.toggle("is-goal", football.lastShot === "goal");
+  pitch.classList.toggle("is-save", football.lastShot === "save");
 
   if (latestId !== lastFootballEventId) {
     lastFootballEventId = latestId;
     const position = ballPositionFor(football, latest);
     ball.style.setProperty("--ball-x", `${position.x}%`);
     ball.style.setProperty("--ball-y", `${position.y}%`);
+    updateFootballPlayers(football, position);
     $("playBanner").textContent = pitchBannerText(football, latest);
     pitch.classList.remove("pitch-hit");
     void pitch.offsetWidth;
@@ -457,24 +479,50 @@ function renderPitch(football) {
   }
 }
 
+function updateFootballPlayers(football, ball) {
+  const pitch = $("footballPitch");
+  const homeAttack = football.attackSide !== "away";
+  const press = football.lastShot === "goal" ? 7 : football.lastShot === "save" ? 4 : 0;
+  const jitter = (seed) => ((football.minute || 1) * (seed + 3)) % 9 - 4;
+  const homeBase = homeAttack ? [28, 43, 58] : [18, 31, 43];
+  const awayBase = homeAttack ? [57, 69, 82] : [42, 57, 72];
+  const coords = [
+    [homeBase[0] + jitter(1), 32 + jitter(2)],
+    [homeBase[1] + jitter(3), 56 + jitter(4)],
+    [Math.min(86, ball.x - 11 + press), Math.max(20, Math.min(80, ball.y + jitter(5)))],
+    [awayBase[2] + jitter(6), 68 + jitter(7)],
+    [awayBase[1] + jitter(8), 43 + jitter(9)],
+    [Math.max(14, ball.x + 11 - press), Math.max(20, Math.min(80, ball.y + jitter(10)))],
+  ];
+  coords.forEach(([x, y], index) => {
+    pitch.style.setProperty(`--p${index + 1}x`, `${Math.max(8, Math.min(92, x))}%`);
+    pitch.style.setProperty(`--p${index + 1}y`, `${Math.max(12, Math.min(88, y))}%`);
+  });
+}
+
 function ballPositionFor(football, latest) {
   if (football.phase === "idle") return { x: 50, y: 50 };
   if (football.phase === "betting") return { x: 50, y: 50 };
   if (football.phase === "finished") return football.winner === "home" ? { x: 88, y: 50 } : { x: 12, y: 50 };
   const text = latest?.text || "";
-  if (text.includes("득점") || text.includes("슈팅")) {
-    return text.includes(football.teams?.[0]) ? { x: 88, y: 48 } : { x: 12, y: 52 };
+  const homeAttack = football.attackSide !== "away";
+  if (football.lastShot === "goal" || text.includes("득점")) {
+    return homeAttack ? { x: 91, y: 50 } : { x: 9, y: 50 };
   }
-  if (text.includes("수비")) return { x: 50, y: 34 };
+  if (football.lastShot === "save" || text.includes("슈팅")) {
+    return homeAttack ? { x: 82, y: 45 } : { x: 18, y: 55 };
+  }
+  if (football.lastShot === "post") return homeAttack ? { x: 88, y: 36 } : { x: 12, y: 64 };
+  if (text.includes("크로스")) return homeAttack ? { x: 72, y: 26 } : { x: 28, y: 74 };
   return {
-    x: 22 + Math.floor(Math.random() * 56),
-    y: 24 + Math.floor(Math.random() * 52),
+    x: homeAttack ? 35 + Math.floor(Math.random() * 38) : 27 + Math.floor(Math.random() * 38),
+    y: 22 + Math.floor(Math.random() * 56),
   };
 }
 
 function pitchBannerText(football, latest) {
   if (football.phase === "betting") return "베팅 중";
-  if (football.phase === "running") return latest?.text || "AI 경기 진행 중";
+  if (football.phase === "running") return `${football.minute || 1}' ${latest?.text || "AI 경기 진행 중"}`;
   if (football.phase === "finished") return football.winnerText || "경기 종료";
   return "대기 중";
 }
@@ -623,6 +671,7 @@ $("loginIdInput").addEventListener("input", () => {
   $("idCheckText").classList.remove("ok", "bad");
 });
 $("saveProfileBtn").addEventListener("click", saveProfile);
+$("deleteAccountBtn").addEventListener("click", deleteAccount);
 $("logoutBtn").addEventListener("click", () => {
   localStorage.removeItem("mafiaAuthToken");
   sessionStorage.removeItem("mafiaAuthToken");
@@ -645,7 +694,9 @@ $("copyInviteBtn").addEventListener("click", copyInvite);
 $("shareInviteBtn").addEventListener("click", shareInvite);
 $("chatForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  send("chat", { text: $("chatInput").value, channel: activeTab === "dead" ? "dead" : "public" });
+  const targetId = $("privateTargetSelect").value;
+  if (targetId) send("privateChat", { targetId, text: $("chatInput").value });
+  else send("chat", { text: $("chatInput").value, channel: activeTab === "dead" ? "dead" : "public" });
   $("chatInput").value = "";
 });
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -674,9 +725,6 @@ document.querySelectorAll(".bet-btn").forEach((button) => {
     send("footballBet", { side: button.dataset.side, amount });
   });
 });
-document.querySelectorAll(".direct-btn").forEach((button) => {
-  button.addEventListener("click", () => send("footballPlay", { move: button.dataset.move }));
-});
 document.querySelectorAll(".mini-btn").forEach((button) => {
   button.addEventListener("click", () => {
     const amount = $("miniAmount").value || 100;
@@ -692,7 +740,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) connect();
 });
 setInterval(() => {
-  if (state?.mode === "football" || state?.mode === "directFootball") {
+if (state?.mode === "football") {
     $("footballClock").textContent = footballClockText(state.football);
     $("footballResult").textContent = state.football?.winnerText || footballSummary(state.football);
   }
@@ -704,3 +752,5 @@ setInterval(() => {
   $("serverHint").textContent = `폰/패드 접속 주소: ${meta.lanUrl || location.origin}`;
   connect();
 })();
+
+
