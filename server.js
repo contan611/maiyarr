@@ -87,9 +87,6 @@ const FOOTBALL_TEAM_POOL = [
   ["아이언 윙스", "골든 라이온즈"],
   ["한강 로버스", "네온 애슬레틱"],
 ];
-const FOOTBALL_STADIUMS = ["월드컵 아레나", "한강 스타디움", "센트럴 파크 필드", "네온 돔", "스카이라인 구장"];
-const FOOTBALL_WEATHERS = ["맑음", "약한 비", "강한 바람", "선선한 밤공기", "습한 잔디"];
-const FOOTBALL_TACTICS = ["높은 압박", "역습", "점유율 축구", "측면 크로스", "중앙 침투", "롱볼 전개"];
 ensureAdminUser();
 
 function makeId(bytes = 8) {
@@ -234,7 +231,7 @@ function sanitizeName(name) {
 }
 
 function normalizeMode(mode) {
-  return ["mafia", "football", "directFootball", "mini"].includes(mode) ? mode : "mafia";
+  return ["mafia", "football", "mini"].includes(mode) ? mode : "mafia";
 }
 
 function cleanText(text, max = 240) {
