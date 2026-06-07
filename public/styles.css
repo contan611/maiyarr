@@ -666,6 +666,51 @@ h3 {
   border-color: rgba(214, 163, 72, 0.45);
 }
 
+.mini-panel {
+  margin-bottom: 18px;
+}
+
+.mini-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.mini-controls label {
+  display: grid;
+  gap: 6px;
+}
+
+.mini-btn.jackpot {
+  border-color: rgba(255, 214, 102, 0.8);
+}
+
+.feedback-card textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.admin-feedback {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.feedback-item {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.feedback-item span {
+  float: right;
+  opacity: 0.65;
+  font-size: 12px;
+}
+
 .players,
 .action,
 .feed {
