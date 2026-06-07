@@ -9,6 +9,11 @@ const HOST = process.env.HOST || "0.0.0.0";
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
+const FEEDBACK_FILE = path.join(DATA_DIR, "feedback.json");
+const USER_DATA_VERSION = 2;
+const DEFAULT_ADMIN_USERNAME = "admin";
+const DEFAULT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "tksxh1357!";
+const DEFAULT_ADMIN_DISPLAY_NAME = process.env.ADMIN_DISPLAY_NAME || "\uc6b4\uc601\uc790";
 const MAX_PLAYERS = 24;
 const ROOM_TTL_MS = 1000 * 60 * 60 * 6;
 const LOBBY_DISCONNECT_GRACE_MS = 25000;
@@ -16,6 +21,7 @@ const LOBBY_DISCONNECT_GRACE_MS = 25000;
 const rooms = new Map();
 const clients = new Map();
 const users = loadUsers();
+const feedbacks = loadFeedbacks();
 const sessions = new Map();
 
 const MIME_TYPES = {
@@ -73,6 +79,18 @@ const FOOTBALL_TEAMS = [
 ];
 const FOOTBALL_START_COINS = 1000;
 const FOOTBALL_BET_MS = 12000;
+const FOOTBALL_TEAM_POOL = [
+  ["레드 유나이티드", "블루 시티"],
+  ["스톰 FC", "실버 일레븐"],
+  ["타이거즈", "블랙 스완즈"],
+  ["다온 서울", "메트로 썬더스"],
+  ["아이언 윙스", "골든 라이온즈"],
+  ["한강 로버스", "네온 애슬레틱"],
+];
+const FOOTBALL_STADIUMS = ["월드컵 아레나", "한강 스타디움", "센트럴 파크 필드", "네온 돔", "스카이라인 구장"];
+const FOOTBALL_WEATHERS = ["맑음", "약한 비", "강한 바람", "선선한 밤공기", "습한 잔디"];
+const FOOTBALL_TACTICS = ["높은 압박", "역습", "점유율 축구", "측면 크로스", "중앙 침투", "롱볼 전개"];
+ensureAdminUser();
 
 function makeId(bytes = 8) {
   return crypto.randomBytes(bytes).toString("hex");
@@ -82,6 +100,7 @@ function loadUsers() {
   try {
     const raw = fs.readFileSync(USERS_FILE, "utf8");
     const parsed = JSON.parse(raw);
+    if (parsed.version !== USER_DATA_VERSION) return new Map();
     return new Map(Object.entries(parsed.users || {}));
   } catch {
     return new Map();
@@ -90,7 +109,39 @@ function loadUsers() {
 
 function saveUsers() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(USERS_FILE, JSON.stringify({ users: Object.fromEntries(users) }, null, 2));
+  fs.writeFileSync(USERS_FILE, JSON.stringify({ version: USER_DATA_VERSION, users: Object.fromEntries(users) }, null, 2));
+}
+
+function loadFeedbacks() {
+  try {
+    const raw = fs.readFileSync(FEEDBACK_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.feedbacks) ? parsed.feedbacks.slice(-200) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFeedbacks() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(FEEDBACK_FILE, JSON.stringify({ feedbacks: feedbacks.slice(-200) }, null, 2));
+}
+
+function ensureAdminUser() {
+  let user = [...users.values()].find((item) => item.username.toLowerCase() === DEFAULT_ADMIN_USERNAME);
+  if (!user) {
+    user = {
+      id: makeId(8),
+      username: DEFAULT_ADMIN_USERNAME,
+      createdAt: Date.now(),
+    };
+  }
+  user.displayName = DEFAULT_ADMIN_DISPLAY_NAME;
+  user.passwordHash = passwordHash(DEFAULT_ADMIN_PASSWORD);
+  user.footballCoins = Number.isFinite(user.footballCoins) ? user.footballCoins : FOOTBALL_START_COINS;
+  user.isAdmin = true;
+  users.set(user.id, user);
+  saveUsers();
 }
 
 function normalizeUsername(username) {
@@ -182,6 +233,10 @@ function sanitizeName(name) {
     .slice(0, 16) || "학생";
 }
 
+function normalizeMode(mode) {
+  return ["mafia", "football", "directFootball", "mini"].includes(mode) ? mode : "mafia";
+}
+
 function cleanText(text, max = 240) {
   return String(text || "").replace(/\s+/g, " ").trim().slice(0, max);
 }
@@ -209,10 +264,11 @@ function serverMeta(req) {
 
 function createRoom(hostId, hostName, mode = "mafia", accountId = null) {
   const code = makeRoomCode();
+  const roomMode = normalizeMode(mode);
   const room = {
     code,
     hostId,
-    mode: mode === "football" ? "football" : "mafia",
+    mode: roomMode,
     phase: "lobby",
     day: 0,
     winner: null,
@@ -238,6 +294,7 @@ function createRoom(hostId, hostName, mode = "mafia", accountId = null) {
     footballBets: new Map(),
     footballDirectActions: new Map(),
     footballTimers: [],
+    miniEvents: [],
   };
   rooms.set(code, room);
   addPlayer(room, hostId, hostName, accountId);
@@ -427,6 +484,19 @@ function footballState(room, viewerId) {
   };
 }
 
+function miniState(room, viewerId) {
+  return {
+    wallet: room.footballWallets.get(viewerId) ?? FOOTBALL_START_COINS,
+    events: room.miniEvents || [],
+    games: [
+      { id: "coin", label: "동전 맞히기", choices: ["front", "back"] },
+      { id: "dice", label: "주사위 홀짝", choices: ["odd", "even"] },
+      { id: "number", label: "1~5 숫자", choices: ["1", "2", "3", "4", "5"] },
+      { id: "roulette", label: "룰렛 색상", choices: ["red", "black", "green"] },
+    ],
+  };
+}
+
 function maybeAutoAdvance(room) {
   if (room.phase === "ended") return false;
   const progress = phaseProgress(room);
@@ -462,6 +532,7 @@ function roomState(room, viewerId) {
     log: room.log.slice(-40),
     event: room.events.at(-1) || null,
     football: footballState(room, viewerId),
+    mini: miniState(room, viewerId),
     notices: room.privateNotices.get(viewerId)?.slice(-12) || [],
     deadPlayers: [...room.players.values()].filter((player) => !player.alive).map((player) => ({ id: player.id, name: player.name })),
   };
@@ -583,7 +654,76 @@ function addFootballEvent(room, text, level = "info") {
   if (room.football.events.length > 16) room.football.events.splice(0, room.football.events.length - 16);
 }
 
+function addMiniEvent(room, text, level = "info") {
+  room.miniEvents = room.miniEvents || [];
+  room.miniEvents.push({ text, level, at: Date.now() });
+  if (room.miniEvents.length > 20) room.miniEvents.splice(0, room.miniEvents.length - 20);
+}
+
+function playMiniGame(room, player, game, choice, amount) {
+  if (room.mode !== "mini") return false;
+  const wallet = room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS;
+  const safeAmount = clampInt(amount, 10, Math.max(10, wallet));
+  if (safeAmount > wallet) return false;
+
+  let result = "";
+  let win = false;
+  let multiplier = 2;
+  const pick = String(choice || "");
+
+  if (game === "coin") {
+    result = Math.random() < 0.5 ? "front" : "back";
+    win = pick === result;
+  } else if (game === "dice") {
+    const roll = 1 + Math.floor(Math.random() * 6);
+    result = roll % 2 ? "odd" : "even";
+    win = pick === result;
+  } else if (game === "number") {
+    const roll = String(1 + Math.floor(Math.random() * 5));
+    result = roll;
+    win = pick === result;
+    multiplier = 5;
+  } else if (game === "roulette") {
+    const roll = Math.random();
+    result = roll < 0.47 ? "red" : roll < 0.94 ? "black" : "green";
+    win = pick === result;
+    multiplier = result === "green" ? 10 : 2;
+  } else {
+    return false;
+  }
+
+  const payout = win ? safeAmount * multiplier : 0;
+  const nextWallet = wallet - safeAmount + payout;
+  room.footballWallets.set(player.id, nextWallet);
+  saveFootballCoins(player.accountId, nextWallet);
+  const gameNames = { coin: "동전", dice: "주사위", number: "숫자", roulette: "룰렛" };
+  addMiniEvent(room, `${player.name}: ${gameNames[game] || game} ${safeAmount}P 베팅, 선택 ${pick}, 결과 ${result} - ${win ? `${payout}P 획득` : "실패"}`, win ? "success" : "danger");
+  return true;
+}
+
+function submitFeedback(client, text) {
+  const user = users.get(client.userId);
+  if (!user) return false;
+  const body = cleanText(text, 600);
+  if (body.length < 2) return false;
+  const item = {
+    id: makeId(6),
+    userId: user.id,
+    username: user.username,
+    displayName: user.displayName || user.username,
+    text: body,
+    at: Date.now(),
+  };
+  feedbacks.push(item);
+  saveFeedbacks();
+  for (const other of clients.values()) {
+    if (isAdminClient(other)) send(other.socket, { type: "adminFeedback", feedbacks: feedbacks.slice(-30), latest: item });
+  }
+  return true;
+}
+
 function startFootballBetting(room) {
+  if (room.football.phase === "betting" || room.football.phase === "running") return false;
   clearFootballTimers(room);
   room.mode = "football";
   room.phase = "lobby";
@@ -598,17 +738,54 @@ function startFootballBetting(room) {
   addEvent(room, "football-bet", "AI 축구 베팅", "12초 안에 이길 팀을 골라 베팅하세요.", "vote");
   addLog(room, "AI 축구 베팅이 시작되었습니다.", "phase");
   room.footballTimers.push(setTimeout(() => runFootballMatch(room.code, room.football.matchId), FOOTBALL_BET_MS));
+  return true;
+}
+
+function startDirectFootball(room) {
+  if (room.football.phase === "running") return false;
+  clearFootballTimers(room);
+  room.mode = "directFootball";
+  room.phase = "lobby";
+  room.winner = null;
+  room.winnerText = "";
+  room.football = createFootballState();
+  room.football.phase = "running";
+  room.football.betsOpenUntil = 0;
+  room.footballBets.clear();
+  room.footballDirectActions.clear();
+  const players = [...room.players.values()];
+  players.forEach((player, index) => {
+    player.directTeam = index % 2 === 0 ? "home" : "away";
+  });
+  const humanCount = players.length;
+  const aiCount = Math.max(0, 8 - humanCount);
+  room.football.aiPlayers = Array.from({ length: aiCount }, (_, index) => ({
+    name: `AI 선수 ${index + 1}`,
+    side: index % 2 === 0 ? "home" : "away",
+  }));
+  addFootballEvent(room, `직접 축구 시작. 실제 참가자 ${humanCount}명, AI ${aiCount}명이 빈자리를 채웁니다.`, "phase");
+  addEvent(room, "football-start", "직접 축구", "직접 슈팅과 수비 지시로 경기가 진행됩니다.", "success");
+  room.footballTimers.push(setTimeout(() => {
+    addFootballEvent(room, "중원에서 압박이 강해졌고 AI 선수들이 측면을 벌려 공격 루트를 만듭니다.", "info");
+    broadcast(room);
+  }, 1200));
+  room.footballTimers.push(setTimeout(() => {
+    addFootballEvent(room, "골키퍼가 긴 패스를 뿌렸고, 공격수가 뒷공간으로 침투합니다.", "info");
+    broadcast(room);
+  }, 2600));
+  room.footballTimers.push(setTimeout(() => finishFootballMatch(room.code, room.football.matchId), 16000));
+  return true;
 }
 
 function placeFootballBet(room, player, side, amount) {
   if (room.mode !== "football" || room.football.phase !== "betting") return false;
   if (!["home", "away"].includes(side)) return false;
   const wallet = room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS;
-  const safeAmount = clampInt(amount, 10, Math.max(10, wallet));
-  if (safeAmount > wallet) return false;
   const existing = room.footballBets.get(player.id);
-  if (existing) room.footballWallets.set(player.id, wallet + existing.amount);
-  const nextWallet = (room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS) - safeAmount;
+  const available = wallet + (existing?.amount || 0);
+  const safeAmount = clampInt(amount, 10, Math.max(10, available));
+  if (safeAmount > available) return false;
+  const nextWallet = available - safeAmount;
   room.footballWallets.set(player.id, nextWallet);
   saveFootballCoins(player.accountId, nextWallet);
   room.footballBets.set(player.id, { playerId: player.id, name: player.name, side, amount: safeAmount });
@@ -648,11 +825,11 @@ function runFootballMatch(code, matchId) {
 }
 
 function footballDirectPlay(room, player, move) {
-  if (room.mode !== "football" || room.football.phase !== "running") return false;
+  if (!["football", "directFootball"].includes(room.mode) || room.football.phase !== "running") return false;
   const used = room.footballDirectActions.get(player.id) || 0;
   if (used >= 4) return false;
   const bet = room.footballBets.get(player.id);
-  const side = bet?.side || (Math.random() > 0.5 ? "home" : "away");
+  const side = player.directTeam || bet?.side || (Math.random() > 0.5 ? "home" : "away");
   const index = side === "home" ? 0 : 1;
   const team = room.football.teams[index];
   room.footballDirectActions.set(player.id, used + 1);
@@ -670,7 +847,7 @@ function footballDirectPlay(room, player, move) {
 
 function finishFootballMatch(code, matchId) {
   const room = rooms.get(code);
-  if (!room || room.mode !== "football" || room.football.matchId !== matchId || room.football.phase !== "running") return;
+  if (!room || !["football", "directFootball"].includes(room.mode) || room.football.matchId !== matchId || room.football.phase !== "running") return;
   room.football.score[0] += Math.floor(Math.random() * 3);
   room.football.score[1] += Math.floor(Math.random() * 3);
   if (room.football.score[0] === room.football.score[1]) room.football.score[Math.random() > 0.5 ? 0 : 1] += 1;
@@ -682,12 +859,15 @@ function finishFootballMatch(code, matchId) {
 
   const totalPool = [...room.footballBets.values()].reduce((sum, bet) => sum + bet.amount, 0);
   const winningPool = [...room.footballBets.values()].filter((bet) => bet.side === winnerSide).reduce((sum, bet) => sum + bet.amount, 0);
-  for (const bet of room.footballBets.values()) {
-    if (bet.side !== winnerSide) continue;
-    const payout = winningPool > 0 ? Math.max(bet.amount * 2, Math.floor((bet.amount / winningPool) * totalPool)) : bet.amount * 2;
-    const nextCoins = (room.footballWallets.get(bet.playerId) ?? 0) + payout;
-    room.footballWallets.set(bet.playerId, nextCoins);
-    saveFootballCoins(room.players.get(bet.playerId)?.accountId, nextCoins);
+  if (room.mode === "football") {
+    const losingPool = Math.max(0, totalPool - winningPool);
+    for (const bet of room.footballBets.values()) {
+      if (bet.side !== winnerSide) continue;
+      const payout = winningPool > 0 ? bet.amount + Math.floor((bet.amount / winningPool) * losingPool) : bet.amount;
+      const nextCoins = (room.footballWallets.get(bet.playerId) ?? 0) + payout;
+      room.footballWallets.set(bet.playerId, nextCoins);
+      saveFootballCoins(room.players.get(bet.playerId)?.accountId, nextCoins);
+    }
   }
 
   const result = `${room.football.teams[0]} ${room.football.score[0]} : ${room.football.score[1]} ${room.football.teams[1]}`;
@@ -877,14 +1057,14 @@ function handleAction(id, message) {
     let user = [...users.values()].find((item) => item.username.toLowerCase() === username.toLowerCase());
     if (data.action === "authRegister") {
       if (user) return send(client.socket, { type: "error", message: "이미 있는 아이디입니다." });
-      const adminNames = String(process.env.ADMIN_USERS || "admin").split(",").map((name) => name.trim().toLowerCase());
+      const adminNames = String(process.env.ADMIN_USERS || "").split(",").map((name) => name.trim().toLowerCase()).filter(Boolean);
       user = {
         id: makeId(8),
         username,
         displayName: normalizeDisplayName(data.displayName, username),
         passwordHash: passwordHash(password),
         footballCoins: FOOTBALL_START_COINS,
-        isAdmin: users.size === 0 || adminNames.includes(username.toLowerCase()),
+        isAdmin: adminNames.includes(username.toLowerCase()),
         createdAt: Date.now(),
       };
       users.set(user.id, user);
@@ -918,6 +1098,16 @@ function handleAction(id, message) {
       broadcast(roomToUpdate);
     }
     return send(client.socket, { type: "auth", user: publicUser(user), sessionToken: createSession(user.id) });
+  }
+
+  if (data.action === "feedbackSubmit") {
+    if (!submitFeedback(client, data.text)) return send(client.socket, { type: "error", message: "피드백 내용을 입력하세요." });
+    return send(client.socket, { type: "toast", message: "피드백이 관리자에게 전달되었습니다." });
+  }
+
+  if (data.action === "feedbackList") {
+    if (!isAdminClient(client)) return;
+    return send(client.socket, { type: "adminFeedback", feedbacks: feedbacks.slice(-30) });
   }
 
   if (data.action === "authRestore") {
@@ -967,21 +1157,27 @@ function handleAction(id, message) {
     addLog(room, "방 설정이 변경되었습니다.");
   } else if (data.action === "mode") {
     if (!canManageRoom || room.phase !== "lobby") return;
-    const nextMode = data.mode === "football" ? "football" : "mafia";
+    const nextMode = normalizeMode(data.mode);
     if (room.mode !== nextMode) {
       clearFootballTimers(room);
       room.mode = nextMode;
       room.football.phase = "idle";
       room.football.betsOpenUntil = 0;
       room.footballBets.clear();
+      room.miniEvents = [];
       addLog(room, nextMode === "football" ? "게임 모드가 AI 축구 베팅으로 변경되었습니다." : "게임 모드가 마피아로 변경되었습니다.", "phase");
     }
   } else if (data.action === "start") {
     if (!canManageRoom) return;
     if (room.mode === "football") {
-      startFootballBetting(room);
+      if (!startFootballBetting(room)) return send(client.socket, { type: "error", message: "이미 경기가 진행 중입니다." });
       return broadcast(room);
     }
+    if (room.mode === "directFootball") {
+      if (!startDirectFootball(room)) return send(client.socket, { type: "error", message: "이미 경기가 진행 중입니다." });
+      return broadcast(room);
+    }
+    if (room.mode === "mini") return;
     const min = Math.max(3, specialRoleTotal(room.settings));
     if (room.players.size < min) return send(client.socket, { type: "error", message: `현재 설정으로는 최소 ${min}명이 필요합니다.` });
     room.settings = sanitizeSettings(room.settings, room.players.size);
@@ -1012,6 +1208,8 @@ function handleAction(id, message) {
     if (!placeFootballBet(room, player, data.side, data.amount)) return send(client.socket, { type: "error", message: "지금은 베팅할 수 없습니다." });
   } else if (data.action === "footballPlay") {
     if (!footballDirectPlay(room, player, data.move)) return send(client.socket, { type: "error", message: "지금은 직접 플레이를 할 수 없습니다." });
+  } else if (data.action === "miniPlay") {
+    if (!playMiniGame(room, player, data.game, data.choice, data.amount)) return send(client.socket, { type: "error", message: "미니게임을 진행할 수 없습니다." });
   } else if (data.action === "chat") {
     if (data.channel === "dead") {
       if (room.phase !== "lobby" && !player.alive && !player.spectator) addDeadMessage(room, player.name, data.text);
@@ -1044,6 +1242,7 @@ function resetRoom(room) {
   room.football = createFootballState();
   room.footballBets.clear();
   room.footballDirectActions.clear();
+  room.miniEvents = [];
   for (const player of room.players.values()) {
     player.role = null;
     player.alive = true;
