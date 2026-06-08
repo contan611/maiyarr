@@ -1104,6 +1104,14 @@ function handleAction(id, message) {
     return send(client.socket, { type: "adminFeedback", feedbacks: feedbacks.slice(-30) });
   }
 
+  if (data.action === "adminStats") {
+    if (!isAdminClient(client)) return;
+    const userList = [...users.values()]
+      .map((user) => publicUser(user))
+      .sort((a, b) => Number(Boolean(b.isAdmin)) - Number(Boolean(a.isAdmin)) || String(a.username).localeCompare(String(b.username)));
+    return send(client.socket, { type: "adminStats", users: userList, rooms: rooms.size, clients: clients.size });
+  }
+
   if (data.action === "accountDelete") {
     const user = users.get(client.userId);
     if (!user) return send(client.socket, { type: "error", message: "먼저 로그인하세요." });
@@ -1164,6 +1172,35 @@ function handleAction(id, message) {
   touch(room);
   const player = room.players.get(id);
   const canManageRoom = room.hostId === id || isAdminClient(client);
+
+  if (data.action === "adminStartFootball") {
+    if (!isAdminClient(client)) return;
+    room.mode = "football";
+    if (!startFootballBetting(room)) return send(client.socket, { type: "error", message: "이미 경기가 진행 중입니다." });
+    addLog(room, "관리자가 축구 베팅을 즉시 열었습니다.", "phase");
+    return broadcast(room);
+  }
+
+  if (data.action === "adminGiftCoins") {
+    if (!isAdminClient(client)) return;
+    const amount = clampInt(data.amount, 10, 100000);
+    for (const target of room.players.values()) {
+      if (isAdminAccountId(target.accountId)) continue;
+      const nextCoins = (room.footballWallets.get(target.id) ?? footballCoinsFor(target.accountId)) + amount;
+      room.footballWallets.set(target.id, nextCoins);
+      saveFootballCoins(target.accountId, nextCoins);
+    }
+    addLog(room, `관리자가 모든 일반 유저에게 ${amount}P를 지급했습니다.`, "success");
+    addEvent(room, "admin-gift", "관리자 지급", `모든 일반 유저에게 ${amount}P 지급`, "success");
+    return broadcast(room);
+  }
+
+  if (data.action === "adminResetRoom") {
+    if (!isAdminClient(client)) return;
+    resetRoom(room);
+    addLog(room, "관리자가 방을 강제 초기화했습니다.", "phase");
+    return broadcast(room);
+  }
 
   if (data.action === "settings") {
     if (!canManageRoom || room.phase !== "lobby") return;
