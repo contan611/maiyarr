@@ -62,7 +62,7 @@
           <button class="game-card-btn" data-pick-mode="mini">
             <span>포인트 게임</span>
             <strong>미니게임</strong>
-            <p>동전, 주사위, 숫자, 룰렛으로 포인트를 굴립니다.</p>
+            <p>동전, 주사위, 숫자, 룰렛, 블랙잭으로 포인트를 굴립니다.</p>
           </button>
           <button id="logoutBtn" class="ghost">로그아웃</button>
           <div class="profile-card">
@@ -220,6 +220,7 @@
             </div>
             <div class="betting-hero-stats">
               <b>HOME</b>
+              <b>DRAW</b>
               <b>LIVE</b>
               <b>AWAY</b>
             </div>
@@ -242,6 +243,7 @@
               <span id="footballPhase">대기</span>
               <strong id="footballClock">--</strong>
               <p id="footballResult">방장이 베팅을 열면 시작됩니다.</p>
+              <button class="bet-btn draw" data-side="draw">무승부</button>
             </div>
             <div class="team-card away">
               <span>AWAY</span>
@@ -251,17 +253,46 @@
             </div>
           </div>
           <div class="pitch-wrap">
+            <div class="football-command-bar" aria-label="경기 전술 상태">
+              <span>스루패스</span>
+              <span>압박</span>
+              <span>슈팅</span>
+              <span>역습</span>
+              <span>크로스</span>
+              <span>세이브</span>
+              <span>VAR</span>
+              <span>하이라이트</span>
+            </div>
             <div class="pitch" id="footballPitch">
+              <div class="pitch-club pitch-club-home" id="homeCrest">H</div>
+              <div class="pitch-club pitch-club-away" id="awayCrest">A</div>
+              <div class="pitch-ads"><span>NEON CUP</span><span>AI LEAGUE</span><span>LIVE 60</span></div>
               <div class="pitch-line center-line"></div>
               <div class="pitch-circle"></div>
               <div class="goal goal-left"></div>
               <div class="goal goal-right"></div>
-              <div class="player-dot home p1"></div>
-              <div class="player-dot home p2"></div>
-              <div class="player-dot home p3"></div>
-              <div class="player-dot away p4"></div>
-              <div class="player-dot away p5"></div>
-              <div class="player-dot away p6"></div>
+              <div class="player-dot keeper home p1" data-no="1"></div>
+              <div class="player-dot home p2" data-no="2"></div>
+              <div class="player-dot home p3" data-no="3"></div>
+              <div class="player-dot home p4" data-no="4"></div>
+              <div class="player-dot home p5" data-no="5"></div>
+              <div class="player-dot home p6" data-no="6"></div>
+              <div class="player-dot home p7" data-no="7"></div>
+              <div class="player-dot home p8" data-no="8"></div>
+              <div class="player-dot home p9" data-no="9"></div>
+              <div class="player-dot home p10" data-no="10"></div>
+              <div class="player-dot home p11" data-no="11"></div>
+              <div class="player-dot keeper away p12" data-no="1"></div>
+              <div class="player-dot away p13" data-no="2"></div>
+              <div class="player-dot away p14" data-no="3"></div>
+              <div class="player-dot away p15" data-no="4"></div>
+              <div class="player-dot away p16" data-no="5"></div>
+              <div class="player-dot away p17" data-no="6"></div>
+              <div class="player-dot away p18" data-no="7"></div>
+              <div class="player-dot away p19" data-no="8"></div>
+              <div class="player-dot away p20" data-no="9"></div>
+              <div class="player-dot away p21" data-no="10"></div>
+              <div class="player-dot away p22" data-no="11"></div>
               <div class="ball" id="footballBall"></div>
               <div class="play-banner" id="playBanner">대기 중</div>
             </div>
@@ -298,12 +329,12 @@
             <div class="mini-hero-copy">
               <span>POINT MINI ZONE</span>
               <strong>미니게임 아레나</strong>
-              <p>동전 · 주사위 · 숫자 슬롯 · 네온 룰렛</p>
+              <p>동전 · 주사위 · 숫자 슬롯 · 룰렛 · 블랙잭</p>
             </div>
             <div class="mini-hero-stats">
               <b>50%</b>
               <b>x5</b>
-              <b>x10</b>
+              <b>x12</b>
             </div>
           </div>
           <div class="panel-head">
@@ -319,7 +350,7 @@
           <div class="mini-neon-strip">
             <span>100P SAFE</span>
             <span>LUCKY DRAW</span>
-            <span>JACKPOT x10</span>
+            <span>JACKPOT x12</span>
             <span>LIVE POINT</span>
           </div>
           <div class="mini-controls">
@@ -327,18 +358,36 @@
               베팅 포인트
               <input id="miniAmount" type="number" min="10" step="10" value="100" />
             </label>
-            <button class="mini-btn" data-game="coin" data-choice="front">동전 앞면<small>50% · 성공 x2</small></button>
-            <button class="mini-btn" data-game="coin" data-choice="back">동전 뒷면<small>50% · 성공 x2</small></button>
-            <button class="mini-btn" data-game="dice" data-choice="odd">주사위 홀<small>50% · 성공 x2</small></button>
-            <button class="mini-btn" data-game="dice" data-choice="even">주사위 짝<small>50% · 성공 x2</small></button>
-            <button class="mini-btn" data-game="number" data-choice="1">숫자 1<small>20% · 성공 x5</small></button>
-            <button class="mini-btn" data-game="number" data-choice="2">숫자 2<small>20% · 성공 x5</small></button>
-            <button class="mini-btn" data-game="number" data-choice="3">숫자 3<small>20% · 성공 x5</small></button>
-            <button class="mini-btn" data-game="number" data-choice="4">숫자 4<small>20% · 성공 x5</small></button>
-            <button class="mini-btn" data-game="number" data-choice="5">숫자 5<small>20% · 성공 x5</small></button>
-            <button class="mini-btn" data-game="roulette" data-choice="red">룰렛 빨강<small>47% · 성공 x2</small></button>
-            <button class="mini-btn" data-game="roulette" data-choice="black">룰렛 검정<small>47% · 성공 x2</small></button>
-            <button class="mini-btn jackpot" data-game="roulette" data-choice="green">룰렛 초록<small>6% · 성공 x10</small></button>
+            <div class="mini-game-group coin">
+              <strong>동전</strong>
+              <button class="mini-btn" data-game="coin" data-choice="front">앞면<small>50% · 성공 x2</small></button>
+              <button class="mini-btn" data-game="coin" data-choice="back">뒷면<small>50% · 성공 x2</small></button>
+            </div>
+            <div class="mini-game-group dice">
+              <strong>주사위</strong>
+              <button class="mini-btn" data-game="dice" data-choice="odd">홀<small>50% · 성공 x2</small></button>
+              <button class="mini-btn" data-game="dice" data-choice="even">짝<small>50% · 성공 x2</small></button>
+            </div>
+            <div class="mini-game-group number">
+              <strong>숫자 슬롯</strong>
+              <button class="mini-btn" data-game="number" data-choice="1">숫자 1<small>20% · 성공 x5</small></button>
+              <button class="mini-btn" data-game="number" data-choice="2">숫자 2<small>20% · 성공 x5</small></button>
+              <button class="mini-btn" data-game="number" data-choice="3">숫자 3<small>20% · 성공 x5</small></button>
+              <button class="mini-btn" data-game="number" data-choice="4">숫자 4<small>20% · 성공 x5</small></button>
+              <button class="mini-btn" data-game="number" data-choice="5">숫자 5<small>20% · 성공 x5</small></button>
+            </div>
+            <div class="mini-game-group roulette">
+              <strong>룰렛</strong>
+              <button class="mini-btn" data-game="roulette" data-choice="red">빨강<small>45% · 성공 x2</small></button>
+              <button class="mini-btn" data-game="roulette" data-choice="black">검정<small>45% · 성공 x2</small></button>
+              <button class="mini-btn jackpot" data-game="roulette" data-choice="green">초록<small>10% · 성공 x12</small></button>
+            </div>
+            <div class="mini-game-group blackjack">
+              <strong>블랙잭</strong>
+              <button class="mini-btn" data-game="blackjack" data-choice="player">플레이어<small>42% · 성공 x2 / 블랙잭 x3</small></button>
+              <button class="mini-btn" data-game="blackjack" data-choice="dealer">딜러<small>48% · 성공 x2</small></button>
+              <button class="mini-btn jackpot" data-game="blackjack" data-choice="tie">타이<small>10% · 성공 x8</small></button>
+            </div>
           </div>
           <div id="miniStage" class="mini-stage">
             <div class="mini-stage-marquee">NEON POINT · LUCKY DRAW · MINI ARENA</div>
@@ -347,6 +396,10 @@
             <div class="mini-visual dice-visual" id="diceVisual">?</div>
             <div class="mini-visual roulette-visual" id="rouletteVisual"><span></span></div>
             <div class="mini-visual number-visual" id="numberVisual">?</div>
+            <div class="mini-visual blackjack-visual" id="blackjackVisual">
+              <div><span>PLAYER</span><b id="blackjackPlayerCards">?</b></div>
+              <div><span>DEALER</span><b id="blackjackDealerCards">?</b></div>
+            </div>
             <div class="mini-sparks" id="miniSparks"><i></i><i></i><i></i><i></i><i></i><i></i></div>
             <strong id="miniResultTitle">게임을 선택하세요</strong>
             <p id="miniResultText">성공률과 성공 시 획득량을 확인하고 베팅하세요. 코인은 100P 아래로 내려가지 않습니다.</p>
