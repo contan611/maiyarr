@@ -143,6 +143,22 @@
           </div>
         </section>
 
+        <section class="admin-tools panel hidden" id="adminToolsPanel">
+          <div class="panel-head">
+            <div>
+              <h3>관리자 도구</h3>
+              <p class="hint" id="adminStatsText">관리자 전용 기능입니다.</p>
+            </div>
+          </div>
+          <div class="admin-tool-grid">
+            <button id="adminStartFootballBtn">축구 베팅 즉시 열기</button>
+            <button id="adminGiftCoinsBtn">전체 1000P 지급</button>
+            <button id="adminResetRoomBtn" class="ghost">방 강제 초기화</button>
+            <button id="adminRefreshBtn" class="ghost">관리 정보 새로고침</button>
+          </div>
+          <div id="adminUsersBox" class="admin-users-box"></div>
+        </section>
+
         <section class="lobby-settings panel" id="settingsPanel">
           <div class="panel-head">
             <div>
@@ -184,6 +200,19 @@
         </section>
 
         <section class="football-panel panel hidden" id="footballPanel">
+          <div class="betting-hero">
+            <div class="betting-ball-art"></div>
+            <div class="betting-hero-copy">
+              <span>AI SPORTS ARENA</span>
+              <strong>축구 베팅 경기</strong>
+              <p>승부 예측, 실시간 하이라이트, 포인트 랭킹</p>
+            </div>
+            <div class="betting-hero-stats">
+              <b>HOME</b>
+              <b>LIVE</b>
+              <b>AWAY</b>
+            </div>
+          </div>
           <div class="panel-head">
             <div>
               <h3>AI 축구</h3>
@@ -286,6 +315,7 @@
             <div class="mini-visual dice-visual" id="diceVisual">?</div>
             <div class="mini-visual roulette-visual" id="rouletteVisual"><span></span></div>
             <div class="mini-visual number-visual" id="numberVisual">?</div>
+            <div class="mini-sparks" id="miniSparks"><i></i><i></i><i></i><i></i><i></i><i></i></div>
             <strong id="miniResultTitle">게임을 선택하세요</strong>
             <p id="miniResultText">성공률과 성공 시 획득량을 확인하고 베팅하세요. 코인은 100P 아래로 내려가지 않습니다.</p>
           </div>
