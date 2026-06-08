@@ -260,6 +260,7 @@ function render() {
 
   renderPlayers();
   renderPrivateTargets();
+  renderAdminGrantTargets();
   if (!isFootball && !isMini) renderTargets();
   renderFootball();
   renderMini();
@@ -328,6 +329,16 @@ function renderPrivateTargets() {
       .map((player) => `<option value="${player.id}">${escapeHtml(player.name)}</option>`),
   );
   select.innerHTML = options.join("");
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function renderAdminGrantTargets() {
+  const select = $("adminGrantTarget");
+  if (!select || !state?.players) return;
+  const current = select.value;
+  select.innerHTML = state.players
+    .map((player) => `<option value="${player.id}">${escapeHtml(player.name)}${player.isYou ? " (나)" : ""}</option>`)
+    .join("");
   if ([...select.options].some((option) => option.value === current)) select.value = current;
 }
 
@@ -780,6 +791,12 @@ $("resetBtn").addEventListener("click", () => send("reset"));
 $("leaveBtn").addEventListener("click", () => send("leave"));
 $("adminStartFootballBtn").addEventListener("click", () => send("adminStartFootball"));
 $("adminGiftCoinsBtn").addEventListener("click", () => send("adminGiftCoins", { amount: 1000 }));
+$("adminGrantBtn").addEventListener("click", () => {
+  send("adminGrantCoins", {
+    targetId: $("adminGrantTarget").value,
+    amount: $("adminGrantAmount").value,
+  });
+});
 $("adminResetRoomBtn").addEventListener("click", () => send("adminResetRoom"));
 $("adminRefreshBtn").addEventListener("click", () => {
   lastAdminStatsRequestAt = Date.now();
