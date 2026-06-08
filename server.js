@@ -70,23 +70,33 @@ const DEFAULT_SETTINGS = {
   autoAdvance: true,
 };
 
-const FOOTBALL_TEAMS = [
-  ["레드 유나이티드", "블루 시티"],
-  ["스톰 FC", "썬더 일레븐"],
-  ["화이트 타이거즈", "블랙 스타즈"],
-  ["네온 서울", "메트로 원더러스"],
-  ["아이언 킥스", "골든 윙스"],
-];
 const FOOTBALL_START_COINS = 1000;
 const MIN_COIN_BALANCE = 100;
 const FOOTBALL_BET_MS = 12000;
+const FOOTBALL_MATCH_MS = 60000;
 const FOOTBALL_TEAM_POOL = [
-  ["레드 유나이티드", "블루 시티"],
-  ["스톰 FC", "실버 일레븐"],
-  ["타이거즈", "블랙 스완즈"],
-  ["다온 서울", "메트로 썬더스"],
-  ["아이언 윙스", "골든 라이온즈"],
-  ["한강 로버스", "네온 애슬레틱"],
+  "맨체스터 시티",
+  "레알 마드리드",
+  "FC 바르셀로나",
+  "리버풀",
+  "파리 생제르맹",
+  "바이에른 뮌헨",
+  "토트넘 홋스퍼",
+  "아스널",
+  "첼시",
+  "맨체스터 유나이티드",
+  "AC 밀란",
+  "유벤투스",
+  "인터 밀란",
+  "아틀레티코 마드리드",
+  "보루시아 도르트문트",
+  "나폴리",
+  "셀틱",
+  "레인저스",
+  "울산 HD",
+  "FC 서울",
+  "전북 현대 모터스",
+  "포항 스틸러스",
 ];
 ensureAdminUser();
 
@@ -459,6 +469,7 @@ function createFootballState() {
     attackSide: "home",
     lastShot: null,
     betsOpenUntil: 0,
+    matchEndsAt: 0,
     winner: null,
     winnerText: "",
     matchId: makeId(4),
@@ -466,13 +477,15 @@ function createFootballState() {
 }
 
 function randomFootballTeams() {
-  return FOOTBALL_TEAM_POOL[Math.floor(Math.random() * FOOTBALL_TEAM_POOL.length)].slice();
+  const teams = shuffle(FOOTBALL_TEAM_POOL.slice());
+  return teams.slice(0, 2);
 }
 
 function footballState(room, viewerId) {
   const bets = [...room.footballBets.values()];
   const homeTotal = bets.filter((bet) => bet.side === "home").reduce((sum, bet) => sum + bet.amount, 0);
   const awayTotal = bets.filter((bet) => bet.side === "away").reduce((sum, bet) => sum + bet.amount, 0);
+  const drawTotal = bets.filter((bet) => bet.side === "draw").reduce((sum, bet) => sum + bet.amount, 0);
   const myBet = room.footballBets.get(viewerId) || null;
   const viewerPlayer = room.players.get(viewerId);
   const adminWallet = isAdminAccountId(viewerPlayer?.accountId);
@@ -481,7 +494,7 @@ function footballState(room, viewerId) {
     wallet: adminWallet ? "∞" : room.footballWallets.get(viewerId) ?? FOOTBALL_START_COINS,
     isAdminWallet: adminWallet,
     myBet,
-    totals: { home: homeTotal, away: awayTotal },
+    totals: { home: homeTotal, away: awayTotal, draw: drawTotal },
     betCount: bets.length,
     leaders: [...room.players.values()].map((player) => ({
       id: player.id,
@@ -504,6 +517,7 @@ function miniState(room, viewerId) {
       { id: "dice", label: "주사위 홀짝", choices: ["odd", "even"] },
       { id: "number", label: "1~5 숫자", choices: ["1", "2", "3", "4", "5"] },
       { id: "roulette", label: "룰렛 색상", choices: ["red", "black", "green"] },
+      { id: "blackjack", label: "블랙잭", choices: ["player", "dealer", "tie"] },
     ],
   };
 }
@@ -662,13 +676,70 @@ function clearFootballTimers(room) {
 
 function addFootballEvent(room, text, level = "info") {
   room.football.events.push({ text, level, at: Date.now() });
-  if (room.football.events.length > 16) room.football.events.splice(0, room.football.events.length - 16);
+  if (room.football.events.length > 30) room.football.events.splice(0, room.football.events.length - 30);
 }
 
 function addMiniEvent(room, text, level = "info", meta = {}) {
   room.miniEvents = room.miniEvents || [];
   room.miniEvents.push({ text, level, at: Date.now(), ...meta });
   if (room.miniEvents.length > 20) room.miniEvents.splice(0, room.miniEvents.length - 20);
+}
+
+function drawBlackjackCard() {
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+  const suits = ["♠", "♥", "♦", "♣"];
+  const rank = ranks[Math.floor(Math.random() * ranks.length)];
+  return `${rank}${suits[Math.floor(Math.random() * suits.length)]}`;
+}
+
+function blackjackValue(cards) {
+  let total = 0;
+  let aces = 0;
+  for (const card of cards) {
+    const rank = String(card).replace(/[♠♥♦♣]/g, "");
+    if (rank === "A") {
+      total += 11;
+      aces += 1;
+    } else if (["J", "Q", "K"].includes(rank)) {
+      total += 10;
+    } else {
+      total += Number(rank) || 0;
+    }
+  }
+  while (total > 21 && aces > 0) {
+    total -= 10;
+    aces -= 1;
+  }
+  return total;
+}
+
+function dealBlackjackRound() {
+  const playerCards = [drawBlackjackCard(), drawBlackjackCard()];
+  const dealerCards = [drawBlackjackCard(), drawBlackjackCard()];
+  while (blackjackValue(playerCards) < 16) playerCards.push(drawBlackjackCard());
+  while (blackjackValue(dealerCards) < 17) dealerCards.push(drawBlackjackCard());
+
+  const playerValue = blackjackValue(playerCards);
+  const dealerValue = blackjackValue(dealerCards);
+  const playerNatural = playerCards.length === 2 && playerValue === 21;
+  const dealerNatural = dealerCards.length === 2 && dealerValue === 21;
+  let outcome = "dealer";
+
+  if (playerValue > 21) outcome = "dealer";
+  else if (dealerValue > 21) outcome = "player";
+  else if (playerNatural && dealerNatural) outcome = "tie";
+  else if (playerNatural) outcome = "blackjack";
+  else if (dealerNatural) outcome = "dealer";
+  else if (playerValue > dealerValue) outcome = "player";
+  else if (playerValue === dealerValue) outcome = "tie";
+
+  return {
+    playerCards,
+    dealerCards,
+    playerValue,
+    dealerValue,
+    outcome,
+  };
 }
 
 function playMiniGame(room, player, game, choice, amount) {
@@ -685,6 +756,9 @@ function playMiniGame(room, player, game, choice, amount) {
   let multiplier = 2;
   let chance = 50;
   let resultLabel = "";
+  let outcome = "lose";
+  let playerCards = [];
+  let dealerCards = [];
   const pick = String(choice || "");
 
   if (game === "coin") {
@@ -707,27 +781,40 @@ function playMiniGame(room, player, game, choice, amount) {
     resultLabel = roll;
   } else if (game === "roulette") {
     const roll = Math.random();
-    result = roll < 0.47 ? "red" : roll < 0.94 ? "black" : "green";
+    result = roll < 0.45 ? "red" : roll < 0.9 ? "black" : "green";
     win = pick === result;
-    multiplier = pick === "green" ? 10 : 2;
-    chance = pick === "green" ? 6 : 47;
+    multiplier = pick === "green" ? 12 : 2;
+    chance = pick === "green" ? 10 : 45;
     resultLabel = result === "red" ? "빨강" : result === "black" ? "검정" : "초록";
+  } else if (game === "blackjack") {
+    if (!["player", "dealer", "tie"].includes(pick)) return false;
+    const round = dealBlackjackRound();
+    result = round.outcome === "blackjack" ? "player" : round.outcome;
+    outcome = round.outcome;
+    playerCards = round.playerCards;
+    dealerCards = round.dealerCards;
+    win = pick === result;
+    multiplier = pick === "tie" ? 8 : round.outcome === "blackjack" && pick === "player" ? 3 : 2;
+    chance = pick === "tie" ? 10 : pick === "player" ? 42 : 48;
+    resultLabel = `플레이어 ${round.playerValue} / 딜러 ${round.dealerValue}`;
   } else {
     return false;
   }
 
+  if (game !== "blackjack" && outcome === "lose") outcome = win ? "win" : "lose";
   const payout = win ? safeAmount * multiplier : 0;
   const nextWallet = adminWallet ? wallet : wallet - safeAmount + payout;
   if (!adminWallet) {
     room.footballWallets.set(player.id, nextWallet);
     saveFootballCoins(player.accountId, nextWallet);
   }
-  const gameNames = { coin: "동전", dice: "주사위", number: "숫자", roulette: "룰렛" };
+  const gameNames = { coin: "동전", dice: "주사위", number: "숫자", roulette: "룰렛", blackjack: "블랙잭" };
+  const outcomeText = win ? `${payout}P 획득` : "실패";
   addMiniEvent(
     room,
-    `${player.name}: ${gameNames[game] || game} ${safeAmount}P 베팅, 성공률 ${chance}%, 성공 시 ${safeAmount * multiplier}P, 결과 ${resultLabel} - ${win ? `${payout}P 획득` : "실패"}`,
-    win ? "success" : "danger",
-    { game, choice: pick, result, resultLabel, win, amount: safeAmount, payout, multiplier, chance },
+    `${player.name}: ${gameNames[game] || game} ${safeAmount}P 베팅, 성공률 ${chance}%, 성공 시 ${safeAmount * multiplier}P, 결과 ${resultLabel} - ${outcomeText}`,
+    win ? "success" : outcome === "push" ? "phase" : "danger",
+    { game, choice: pick, result, resultLabel, win, outcome, amount: safeAmount, payout, multiplier, chance, playerCards, dealerCards },
   );
   return true;
 }
@@ -766,14 +853,14 @@ function startFootballBetting(room) {
   room.footballBets.clear();
   room.footballDirectActions.clear();
   addFootballEvent(room, `${room.football.teams[0]} vs ${room.football.teams[1]} 베팅이 열렸습니다.`, "phase");
-  addEvent(room, "football-bet", "AI 축구 베팅", "12초 안에 이길 팀을 골라 베팅하세요.", "vote");
+  addEvent(room, "football-bet", "AI 축구 베팅", "12초 안에 홈/무승부/원정 중 하나를 골라 베팅하세요.", "vote");
   addLog(room, "AI 축구 베팅이 시작되었습니다.", "phase");
   room.footballTimers.push(setTimeout(() => runFootballMatch(room.code, room.football.matchId), FOOTBALL_BET_MS));
   return true;
 }
 function placeFootballBet(room, player, side, amount) {
   if (room.mode !== "football" || room.football.phase !== "betting") return false;
-  if (!["home", "away"].includes(side)) return false;
+  if (!["home", "away", "draw"].includes(side)) return false;
   const adminWallet = isAdminAccountId(player.accountId);
   const wallet = room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS;
   const existing = room.footballBets.get(player.id);
@@ -788,7 +875,8 @@ function placeFootballBet(room, player, side, amount) {
     saveFootballCoins(player.accountId, nextWallet);
   }
   room.footballBets.set(player.id, { playerId: player.id, name: player.name, side, amount: safeAmount });
-  addFootballEvent(room, `${player.name} 님이 ${side === "home" ? room.football.teams[0] : room.football.teams[1]}에 ${safeAmount}포인트 베팅했습니다.`, "bet");
+  const sideLabel = side === "home" ? room.football.teams[0] : side === "away" ? room.football.teams[1] : "무승부";
+  addFootballEvent(room, `${player.name} 님이 ${sideLabel}에 ${safeAmount}포인트 베팅했습니다.`, "bet");
   return true;
 }
 function runFootballMatch(code, matchId) {
@@ -796,25 +884,43 @@ function runFootballMatch(code, matchId) {
   if (!room || room.mode !== "football" || room.football.matchId !== matchId || room.football.phase !== "betting") return;
   room.football.phase = "running";
   room.football.betsOpenUntil = 0;
+  room.football.matchEndsAt = Date.now() + FOOTBALL_MATCH_MS;
   room.football.minute = 1;
   room.football.lastShot = null;
-  addFootballEvent(room, `킥오프! ${room.football.teams[0]}와 ${room.football.teams[1]}의 AI 축구 경기가 시작됐습니다.`, "phase");
-  addEvent(room, "football-start", "킥오프", `${room.football.teams[0]} vs ${room.football.teams[1]} 경기 시작!`, "success");
+  addFootballEvent(room, `킥오프! ${room.football.teams[0]}와 ${room.football.teams[1]}의 1분 하이라이트 경기가 시작됐습니다.`, "phase");
+  addEvent(room, "football-start", "킥오프", `${room.football.teams[0]} vs ${room.football.teams[1]} 60초 경기 시작!`, "success");
   broadcast(room);
 
   const [home, away] = room.football.teams;
-  const highlightPool = [
-    { minute: 7, side: "home", kind: "attack", text: `${home} 윙어가 터치라인을 따라 질주합니다. 수비 한 명을 접고 박스 안으로 낮은 크로스!` },
-    { minute: 14, side: "away", kind: "save", text: `${away}의 첫 슈팅! 골키퍼가 몸을 날려 쳐냅니다. 관중석이 크게 술렁입니다.` },
-    { minute: 23, side: "home", kind: "chance", text: `${home} 미드필더가 침투 패스를 찔러 넣습니다. 스트라이커가 골키퍼와 1대1!` },
-    { minute: 31, side: "away", kind: "attack", text: `${away}가 빠른 역습을 전개합니다. 오른쪽에서 컷백, 페널티 지점에서 논스톱 슈팅!` },
-    { minute: 44, side: "home", kind: "post", text: `${home}의 감아차기! 공이 골대를 때리고 튀어나옵니다. 전반 최고의 장면입니다.` },
-    { minute: 52, side: "away", kind: "chance", text: `${away}가 코너킥을 얻어냅니다. 문전 혼전, 헤더가 골문 쪽으로 향합니다!` },
-    { minute: 67, side: "home", kind: "save", text: `${home}이 박스 밖에서 강하게 때립니다. 골키퍼가 손끝으로 간신히 넘깁니다.` },
-    { minute: 78, side: "away", kind: "attack", text: `${away}가 수비 뒷공간을 파고듭니다. 오프사이드 라인을 절묘하게 깨뜨렸습니다.` },
-    { minute: 88, side: Math.random() > 0.5 ? "home" : "away", kind: "chance", text: `추가 시간 직전 마지막 공격입니다. 공이 박스 안에서 살아 있고 모두가 골문 앞으로 몰립니다!` },
+  const templates = [
+    { kind: "attack", text: (team) => `${team}가 짧은 패스로 압박을 풀고 중앙선을 넘어갑니다. 2선에서 바로 전진 패스!` },
+    { kind: "dribble", text: (team) => `${team} 측면 공격수가 속도를 올립니다. 수비수 한 명을 제치고 박스 모서리까지 진입합니다.` },
+    { kind: "save", text: (team) => `${team}의 낮고 빠른 슈팅! 골키퍼가 반응해 몸을 날려 막아냅니다.` },
+    { kind: "chance", text: (team) => `${team} 스트라이커가 침투합니다. 골키퍼와 1대1, 슈팅 각도가 열렸습니다!` },
+    { kind: "post", text: (team) => `${team}의 감아차기! 공이 골대를 때리고 튀어나옵니다.` },
+    { kind: "corner", text: (team) => `${team} 코너킥입니다. 니어 포스트로 강하게 붙였고 문전 혼전이 이어집니다.` },
+    { kind: "press", text: (team) => `${team}가 전방 압박으로 공을 빼앗았습니다. 바로 역습 전개!` },
+    { kind: "save", text: (team) => `${team}가 박스 밖에서 강하게 때립니다. 골키퍼 손끝에 걸립니다.` },
+    { kind: "chance", text: (team) => `${team}의 컷백 패스가 페널티 지점으로 흐릅니다. 논스톱 슈팅!` },
+    { kind: "attack", text: (team) => `${team}가 수비 뒷공간을 파고듭니다. 라인을 깨고 오른발 슈팅 준비!` },
+    { kind: "foul", text: (team) => `${team}가 좋은 위치에서 프리킥을 얻었습니다. 키커가 공 앞에 섭니다.` },
+    { kind: "chance", text: (team) => `${team}의 헤더! 공이 골문 구석으로 향합니다.` },
   ];
-  const moments = highlightPool.map((item) => ({ ...item, goal: ["chance", "attack"].includes(item.kind) && Math.random() < 0.34 }));
+  const moments = Array.from({ length: 24 }, (_, index) => {
+    const minute = Math.min(90, Math.round(3 + (index / 23) * 87));
+    const side = Math.random() < 0.5 ? "home" : "away";
+    const team = side === "home" ? home : away;
+    const template = templates[index % templates.length];
+    const baseGoalChance = { chance: 0.22, attack: 0.14, dribble: 0.12, corner: 0.16, press: 0.13, foul: 0.11, save: 0, post: 0 }[template.kind] || 0.1;
+    return {
+      minute,
+      side,
+      kind: template.kind,
+      text: template.text(team),
+      goal: Math.random() < baseGoalChance,
+    };
+  });
+  const interval = Math.floor(FOOTBALL_MATCH_MS / (moments.length + 1));
   moments.forEach((moment, index) => {
     room.footballTimers.push(setTimeout(() => {
       const current = rooms.get(code);
@@ -831,25 +937,24 @@ function runFootballMatch(code, matchId) {
         addEvent(current, "football-goal", "GOAL", `${current.football.teams[scoreIndex]} 득점!`, "success");
       }
       broadcast(current);
-    }, 900 + index * 1200));
+    }, 900 + index * interval));
   });
-  room.footballTimers.push(setTimeout(() => finishFootballMatch(code, matchId), 12400));
+  room.footballTimers.push(setTimeout(() => finishFootballMatch(code, matchId), FOOTBALL_MATCH_MS + 900));
 }
 function finishFootballMatch(code, matchId) {
   const room = rooms.get(code);
   if (!room || room.mode !== "football" || room.football.matchId !== matchId || room.football.phase !== "running") return;
-  if (room.football.score[0] === 0 && room.football.score[1] === 0) {
+  if (room.football.score[0] === 0 && room.football.score[1] === 0 && Math.random() < 0.45) {
     const lateSide = Math.random() > 0.5 ? 0 : 1;
     room.football.score[lateSide] += 1;
     room.football.lastShot = "goal";
     addFootballEvent(room, `90+2' 극적인 결승골! ${room.football.teams[lateSide]}가 마지막 찬스를 골로 연결합니다.`, "success");
   }
-  if (room.football.score[0] === room.football.score[1]) room.football.score[Math.random() > 0.5 ? 0 : 1] += 1;
-  const winnerSide = room.football.score[0] > room.football.score[1] ? "home" : "away";
-  const winnerIndex = winnerSide === "home" ? 0 : 1;
+  const winnerSide = room.football.score[0] === room.football.score[1] ? "draw" : room.football.score[0] > room.football.score[1] ? "home" : "away";
+  const winnerIndex = winnerSide === "home" ? 0 : winnerSide === "away" ? 1 : -1;
   room.football.phase = "finished";
   room.football.winner = winnerSide;
-  room.football.winnerText = `${room.football.teams[winnerIndex]} 승리`;
+  room.football.winnerText = winnerSide === "draw" ? "무승부" : `${room.football.teams[winnerIndex]} 승리`;
 
   const totalPool = [...room.footballBets.values()].reduce((sum, bet) => sum + bet.amount, 0);
   const winningPool = [...room.footballBets.values()].filter((bet) => bet.side === winnerSide).reduce((sum, bet) => sum + bet.amount, 0);
@@ -866,7 +971,7 @@ function finishFootballMatch(code, matchId) {
 
   const result = `${room.football.teams[0]} ${room.football.score[0]} : ${room.football.score[1]} ${room.football.teams[1]}`;
   addFootballEvent(room, `${result}. ${room.football.winnerText}!`, "success");
-  addEvent(room, "football-result", "경기 종료", `${result}. ${room.football.winnerText}!`, winnerSide === "home" ? "success" : "night");
+  addEvent(room, "football-result", "경기 종료", `${result}. ${room.football.winnerText}!`, winnerSide === "draw" ? "phase" : winnerSide === "home" ? "success" : "night");
   addLog(room, `AI 축구 경기 종료: ${result}.`, "success");
   broadcast(room);
 }
