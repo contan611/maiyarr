@@ -28,6 +28,7 @@ let lastEventId = null;
 let account = null;
 let selectedMode = "mafia";
 let lastFootballEventId = null;
+let lastMiniEventId = null;
 const sessionId = getSessionId();
 
 async function loadMeta() {
@@ -449,10 +450,50 @@ function renderFootball() {
 function renderMini() {
   if (state.mode !== "mini" || !state.mini) return;
   $("miniWallet").textContent = state.mini.isAdminWallet ? "∞" : `${state.mini.wallet ?? 0}`;
-  $("miniAmount").max = state.mini.isAdminWallet ? 1000000 : Math.max(10, state.mini.wallet ?? 0);
+  const maxBet = state.mini.isAdminWallet ? 1000000 : Math.max(0, (Number(state.mini.wallet) || 0) - 100);
+  $("miniAmount").max = Math.max(10, maxBet);
+  document.querySelectorAll(".mini-btn").forEach((button) => {
+    button.disabled = !state.mini.isAdminWallet && maxBet < 10;
+  });
+  const latest = state.mini.events?.at(-1);
+  renderMiniEffect(latest);
   $("miniEvents").innerHTML = state.mini.events?.length
     ? state.mini.events.slice().reverse().map((line) => `<div class="football-line ${line.level || ""}">${escapeHtml(line.text)}<span>${timeText(line.at)}</span></div>`).join("")
     : `<p class="hint">아직 미니게임 기록이 없습니다.</p>`;
+}
+
+function startMiniEffect(game, choice) {
+  const stage = $("miniStage");
+  if (!stage) return;
+  stage.className = `mini-stage rolling ${game}`;
+  $("coinVisual").textContent = "?";
+  $("diceVisual").textContent = "?";
+  $("numberVisual").textContent = "?";
+  $("rouletteVisual").dataset.result = "";
+  $("rouletteVisual").style.setProperty("--roulette-stop", "900deg");
+  $("rouletteVisual").querySelector("span").textContent = "";
+  $("miniResultTitle").textContent = game === "roulette" ? "룰렛 회전 중" : game === "dice" ? "주사위 굴리는 중" : game === "coin" ? "동전 뒤집는 중" : "숫자 추첨 중";
+  $("miniResultText").textContent = `선택: ${choice}`;
+}
+
+function renderMiniEffect(event) {
+  if (!event || !event.game) return;
+  const eventId = `${event.at}:${event.text}`;
+  if (eventId === lastMiniEventId) return;
+  lastMiniEventId = eventId;
+  const stage = $("miniStage");
+  if (!stage) return;
+  stage.className = `mini-stage settled ${event.game} ${event.win ? "win" : "lose"}`;
+  $("miniResultTitle").textContent = event.win ? "성공!" : "실패";
+  $("miniResultText").textContent = `성공률 ${event.chance}% · 성공 시 ${event.amount * event.multiplier}P · 결과 ${event.resultLabel} · ${event.win ? `${event.payout}P 획득` : "베팅 실패"}`;
+  $("coinVisual").textContent = event.game === "coin" ? (event.result === "back" ? "뒤" : "앞") : "?";
+  $("diceVisual").textContent = event.game === "dice" ? event.resultLabel : "?";
+  $("numberVisual").textContent = event.game === "number" ? event.resultLabel : "?";
+  const roulette = $("rouletteVisual");
+  roulette.dataset.result = event.result || "";
+  const rouletteAngles = { red: "1110deg", black: "1260deg", green: "1410deg" };
+  roulette.style.setProperty("--roulette-stop", rouletteAngles[event.result] || "1080deg");
+  roulette.querySelector("span").textContent = event.game === "roulette" ? event.resultLabel : "";
 }
 
 function renderPitch(football) {
@@ -728,6 +769,7 @@ document.querySelectorAll(".bet-btn").forEach((button) => {
 document.querySelectorAll(".mini-btn").forEach((button) => {
   button.addEventListener("click", () => {
     const amount = $("miniAmount").value || 100;
+    startMiniEffect(button.dataset.game, button.dataset.choice);
     send("miniPlay", { game: button.dataset.game, choice: button.dataset.choice, amount });
   });
 });
