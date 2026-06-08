@@ -447,6 +447,9 @@ function renderFootball() {
   const football = state.football;
   $("homeTeam").textContent = football.teams?.[0] || "홈팀";
   $("awayTeam").textContent = football.teams?.[1] || "원정팀";
+  $("homeCrest").textContent = teamMark(football.teams?.[0] || "H");
+  $("awayCrest").textContent = teamMark(football.teams?.[1] || "A");
+  applyFootballTeamStyles(football);
   $("homeScore").textContent = football.score?.[0] ?? 0;
   $("awayScore").textContent = football.score?.[1] ?? 0;
   $("footballPhase").textContent = footballPhaseLabel(football.phase);
@@ -458,7 +461,7 @@ function renderFootball() {
   document.querySelector(".bet-strip")?.classList.remove("hidden");
 
   if (football.myBet) {
-    const team = football.myBet.side === "home" ? football.teams[0] : football.teams[1];
+    const team = football.myBet.side === "home" ? football.teams[0] : football.myBet.side === "away" ? football.teams[1] : "무승부";
     $("myFootballBet").textContent = `${team} ${football.myBet.amount}P`;
   } else {
     $("myFootballBet").textContent = "없음";
@@ -504,11 +507,13 @@ function startMiniEffect(game, choice) {
   $("diceVisual").dataset.roll = "";
   $("numberVisual").textContent = "?";
   $("numberVisual").dataset.roll = "";
+  $("blackjackPlayerCards").textContent = "?";
+  $("blackjackDealerCards").textContent = "?";
   $("rouletteVisual").dataset.result = "";
   $("rouletteVisual").style.setProperty("--roulette-stop", "900deg");
   $("rouletteVisual").querySelector("span").textContent = "";
-  $("miniResultTitle").textContent = game === "roulette" ? "룰렛 회전 중" : game === "dice" ? "주사위 굴리는 중" : game === "coin" ? "동전 뒤집는 중" : "숫자 추첨 중";
-  $("miniResultText").textContent = `선택: ${choice}`;
+  $("miniResultTitle").textContent = game === "blackjack" ? "카드 딜링 중" : game === "roulette" ? "룰렛 회전 중" : game === "dice" ? "주사위 굴리는 중" : game === "coin" ? "동전 뒤집는 중" : "숫자 추첨 중";
+  $("miniResultText").textContent = `선택: ${miniChoiceLabel(game, choice)}`;
 }
 
 function renderMiniEffect(event) {
@@ -523,12 +528,14 @@ function renderMiniEffect(event) {
   stage.className = `mini-stage settled ${event.game} ${event.win ? "win" : "lose"}`;
   stage.dataset.result = event.result || "";
   $("miniResultTitle").textContent = event.win ? "성공!" : "실패";
-  $("miniResultText").textContent = `성공률 ${event.chance}% · 성공 시 ${event.amount * event.multiplier}P · 결과 ${event.resultLabel} · ${event.win ? `${event.payout}P 획득` : "베팅 실패"}`;
+  $("miniResultText").textContent = `선택 ${miniChoiceLabel(event.game, event.choice)} · 성공률 ${event.chance}% · 성공 시 ${event.amount * event.multiplier}P · 결과 ${event.resultLabel} · ${event.win ? `${event.payout}P 획득` : "베팅 실패"}`;
   $("coinVisual").textContent = event.game === "coin" ? (event.result === "back" ? "뒤" : "앞") : "?";
   $("diceVisual").textContent = event.game === "dice" ? event.resultLabel : "?";
   $("diceVisual").dataset.roll = event.game === "dice" ? event.resultLabel : "";
   $("numberVisual").textContent = event.game === "number" ? event.resultLabel : "?";
   $("numberVisual").dataset.roll = event.game === "number" ? event.resultLabel : "";
+  $("blackjackPlayerCards").textContent = event.game === "blackjack" ? (event.playerCards || []).join(" ") : "?";
+  $("blackjackDealerCards").textContent = event.game === "blackjack" ? (event.dealerCards || []).join(" ") : "?";
   const roulette = $("rouletteVisual");
   roulette.dataset.result = event.result || "";
   const rouletteAngles = { red: "1110deg", black: "1260deg", green: "1410deg" };
@@ -567,18 +574,38 @@ function renderPitch(football) {
 function updateFootballPlayers(football, ball) {
   const pitch = $("footballPitch");
   const homeAttack = football.attackSide !== "away";
-  const press = football.lastShot === "goal" ? 7 : football.lastShot === "save" ? 4 : 0;
-  const jitter = (seed) => ((football.minute || 1) * (seed + 3)) % 9 - 4;
-  const homeBase = homeAttack ? [28, 43, 58] : [18, 31, 43];
-  const awayBase = homeAttack ? [57, 69, 82] : [42, 57, 72];
-  const coords = [
-    [homeBase[0] + jitter(1), 32 + jitter(2)],
-    [homeBase[1] + jitter(3), 56 + jitter(4)],
-    [Math.min(86, ball.x - 11 + press), Math.max(20, Math.min(80, ball.y + jitter(5)))],
-    [awayBase[2] + jitter(6), 68 + jitter(7)],
-    [awayBase[1] + jitter(8), 43 + jitter(9)],
-    [Math.max(14, ball.x + 11 - press), Math.max(20, Math.min(80, ball.y + jitter(10)))],
-  ];
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const jitter = (seed) => (((football.minute || 1) * (seed + 5)) % 7) - 3;
+  const homeShift = homeAttack ? 7 : -5;
+  const awayShift = homeAttack ? 5 : -7;
+  const home = [
+    [7, 50],
+    [18, 18], [19, 38], [19, 62], [18, 82],
+    [34, 25], [36, 50], [34, 75],
+    [49, 32], [54, 50], [49, 68],
+  ].map(([x, y], index) => [x + homeShift + jitter(index), y + jitter(index + 11)]);
+  const away = [
+    [93, 50],
+    [82, 18], [81, 38], [81, 62], [82, 82],
+    [66, 25], [64, 50], [66, 75],
+    [51, 32], [46, 50], [51, 68],
+  ].map(([x, y], index) => [x + awayShift + jitter(index + 22), y + jitter(index + 33)]);
+
+  if (homeAttack) {
+    home[8] = [clamp(ball.x - 13, 38, 83), clamp(ball.y - 15, 16, 84)];
+    home[9] = [clamp(ball.x - 8, 40, 87), clamp(ball.y + 2, 16, 84)];
+    home[10] = [clamp(ball.x - 14, 38, 83), clamp(ball.y + 16, 16, 84)];
+    away[5] = [clamp(ball.x + 10, 18, 88), clamp(ball.y - 12, 16, 84)];
+    away[6] = [clamp(ball.x + 13, 18, 88), clamp(ball.y + 8, 16, 84)];
+  } else {
+    away[8] = [clamp(ball.x + 13, 17, 62), clamp(ball.y - 15, 16, 84)];
+    away[9] = [clamp(ball.x + 8, 13, 60), clamp(ball.y + 2, 16, 84)];
+    away[10] = [clamp(ball.x + 14, 17, 62), clamp(ball.y + 16, 16, 84)];
+    home[5] = [clamp(ball.x - 10, 12, 82), clamp(ball.y - 12, 16, 84)];
+    home[6] = [clamp(ball.x - 13, 12, 82), clamp(ball.y + 8, 16, 84)];
+  }
+
+  const coords = [...home, ...away];
   coords.forEach(([x, y], index) => {
     pitch.style.setProperty(`--p${index + 1}x`, `${Math.max(8, Math.min(92, x))}%`);
     pitch.style.setProperty(`--p${index + 1}y`, `${Math.max(12, Math.min(88, y))}%`);
@@ -588,7 +615,7 @@ function updateFootballPlayers(football, ball) {
 function ballPositionFor(football, latest) {
   if (football.phase === "idle") return { x: 50, y: 50 };
   if (football.phase === "betting") return { x: 50, y: 50 };
-  if (football.phase === "finished") return football.winner === "home" ? { x: 88, y: 50 } : { x: 12, y: 50 };
+  if (football.phase === "finished") return football.winner === "draw" ? { x: 50, y: 50 } : football.winner === "home" ? { x: 88, y: 50 } : { x: 12, y: 50 };
   const text = latest?.text || "";
   const homeAttack = football.attackSide !== "away";
   if (football.lastShot === "goal" || text.includes("득점")) {
@@ -622,16 +649,88 @@ function footballPhaseLabel(phase) {
 }
 
 function footballClockText(football) {
-  if (football.phase !== "betting") return football.phase === "running" ? "LIVE" : "--";
+  if (football.phase === "running") {
+    const left = Math.max(0, Math.ceil(((football.matchEndsAt || Date.now()) - Date.now()) / 1000));
+    return `${left}초 LIVE`;
+  }
+  if (football.phase !== "betting") return "--";
   const left = Math.max(0, Math.ceil((football.betsOpenUntil - Date.now()) / 1000));
   return `${left}초`;
 }
 
 function footballSummary(football) {
-  if (football.phase === "betting") return `총 베팅 ${football.betCount || 0}명 · 홈 ${football.totals?.home || 0}P / 원정 ${football.totals?.away || 0}P`;
-  if (football.phase === "running") return "AI 경기가 진행 중입니다.";
+  if (football.phase === "betting") return `총 베팅 ${football.betCount || 0}명 · 홈 ${football.totals?.home || 0}P / 무 ${football.totals?.draw || 0}P / 원정 ${football.totals?.away || 0}P`;
+  if (football.phase === "running") return "1분 하이라이트 경기가 진행 중입니다.";
   if (football.phase === "finished") return "방장이 다시 베팅을 열 수 있습니다.";
   return "방장이 베팅을 열면 시작됩니다.";
+}
+
+function teamMark(name) {
+  const compact = String(name || "").replace(/\s+/g, "");
+  if (/FC/.test(name)) return "FC";
+  if (/AC/.test(name)) return "AC";
+  if (/HD/.test(name)) return "HD";
+  return compact.slice(0, 2).toUpperCase();
+}
+
+function applyFootballTeamStyles(football) {
+  const panel = $("footballPanel");
+  if (!panel) return;
+  const home = teamPalette(football.teams?.[0], "home");
+  const away = teamPalette(football.teams?.[1], "away");
+  const vars = {
+    "--home-kit-main": home.main,
+    "--home-kit-sub": home.sub,
+    "--home-kit-trim": home.trim,
+    "--home-kit-text": home.text,
+    "--away-kit-main": away.main,
+    "--away-kit-sub": away.sub,
+    "--away-kit-trim": away.trim,
+    "--away-kit-text": away.text,
+  };
+  Object.entries(vars).forEach(([key, value]) => panel.style.setProperty(key, value));
+}
+
+function teamPalette(name, side) {
+  const palettes = {
+    "맨체스터 시티": ["#8fd8ff", "#ffffff", "#101a31", "#071626"],
+    "레알 마드리드": ["#ffffff", "#f5d776", "#2b2f7f", "#101315"],
+    "FC 바르셀로나": ["#a50044", "#004d98", "#ffed02", "#ffffff"],
+    "리버풀": ["#c8102e", "#ffffff", "#00b2a9", "#ffffff"],
+    "파리 생제르맹": ["#004170", "#da291c", "#ffffff", "#ffffff"],
+    "바이에른 뮌헨": ["#dc052d", "#ffffff", "#0066b2", "#ffffff"],
+    "토트넘 홋스퍼": ["#ffffff", "#132257", "#a4d8ff", "#101315"],
+    "아스널": ["#ef0107", "#ffffff", "#063672", "#ffffff"],
+    "첼시": ["#034694", "#ffffff", "#dba111", "#ffffff"],
+    "맨체스터 유나이티드": ["#da291c", "#111111", "#fbe122", "#ffffff"],
+    "AC 밀란": ["#fb090b", "#000000", "#ffffff", "#ffffff"],
+    "유벤투스": ["#ffffff", "#111111", "#d4af37", "#101315"],
+    "인터 밀란": ["#010e80", "#000000", "#f7c600", "#ffffff"],
+    "아틀레티코 마드리드": ["#cb3524", "#ffffff", "#272e61", "#ffffff"],
+    "보루시아 도르트문트": ["#fde100", "#111111", "#ffffff", "#101315"],
+    "나폴리": ["#12a8e0", "#ffffff", "#003c71", "#071626"],
+    "셀틱": ["#009f58", "#ffffff", "#f5d776", "#071626"],
+    "레인저스": ["#005eb8", "#ffffff", "#e4002b", "#ffffff"],
+    "울산 HD": ["#005bac", "#f5d41c", "#ffffff", "#ffffff"],
+    "FC 서울": ["#c8102e", "#111111", "#d4af37", "#ffffff"],
+    "전북 현대 모터스": ["#00843d", "#ffffff", "#111111", "#ffffff"],
+    "포항 스틸러스": ["#c8102e", "#111111", "#f5d776", "#ffffff"],
+  };
+  const fallback = side === "home"
+    ? ["#a50044", "#004d98", "#ffed02", "#ffffff"]
+    : ["#ffffff", "#1c1c23", "#2fe5ff", "#101315"];
+  const [main, sub, trim, text] = palettes[name] || fallback;
+  return { main, sub, trim, text };
+}
+
+function miniChoiceLabel(game, choice) {
+  const labels = {
+    coin: { front: "앞면", back: "뒷면" },
+    dice: { odd: "홀", even: "짝" },
+    roulette: { red: "빨강", black: "검정", green: "초록" },
+    blackjack: { player: "플레이어", dealer: "딜러", tie: "타이" },
+  };
+  return labels[game]?.[choice] || choice;
 }
 
 function renderEvent() {
