@@ -78,6 +78,7 @@ const FOOTBALL_TEAMS = [
   ["아이언 킥스", "골든 윙스"],
 ];
 const FOOTBALL_START_COINS = 1000;
+const MIN_COIN_BALANCE = 100;
 const FOOTBALL_BET_MS = 12000;
 const FOOTBALL_TEAM_POOL = [
   ["레드 유나이티드", "블루 시티"],
@@ -664,9 +665,9 @@ function addFootballEvent(room, text, level = "info") {
   if (room.football.events.length > 16) room.football.events.splice(0, room.football.events.length - 16);
 }
 
-function addMiniEvent(room, text, level = "info") {
+function addMiniEvent(room, text, level = "info", meta = {}) {
   room.miniEvents = room.miniEvents || [];
-  room.miniEvents.push({ text, level, at: Date.now() });
+  room.miniEvents.push({ text, level, at: Date.now(), ...meta });
   if (room.miniEvents.length > 20) room.miniEvents.splice(0, room.miniEvents.length - 20);
 }
 
@@ -674,31 +675,43 @@ function playMiniGame(room, player, game, choice, amount) {
   if (room.mode !== "mini") return false;
   const adminWallet = isAdminAccountId(player.accountId);
   const wallet = room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS;
-  const safeAmount = adminWallet ? clampInt(amount, 10, 1000000) : clampInt(amount, 10, Math.max(10, wallet));
-  if (!adminWallet && safeAmount > wallet) return false;
+  const maxBet = adminWallet ? 1000000 : Math.max(0, wallet - MIN_COIN_BALANCE);
+  if (!adminWallet && maxBet < 10) return false;
+  const safeAmount = adminWallet ? clampInt(amount, 10, maxBet) : clampInt(amount, 10, maxBet);
+  if (!adminWallet && safeAmount > maxBet) return false;
 
   let result = "";
   let win = false;
   let multiplier = 2;
+  let chance = 50;
+  let resultLabel = "";
   const pick = String(choice || "");
 
   if (game === "coin") {
     result = Math.random() < 0.5 ? "front" : "back";
     win = pick === result;
+    chance = 50;
+    resultLabel = result === "front" ? "앞면" : "뒷면";
   } else if (game === "dice") {
     const roll = 1 + Math.floor(Math.random() * 6);
     result = roll % 2 ? "odd" : "even";
     win = pick === result;
+    chance = 50;
+    resultLabel = `${roll}`;
   } else if (game === "number") {
     const roll = String(1 + Math.floor(Math.random() * 5));
     result = roll;
     win = pick === result;
     multiplier = 5;
+    chance = 20;
+    resultLabel = roll;
   } else if (game === "roulette") {
     const roll = Math.random();
     result = roll < 0.47 ? "red" : roll < 0.94 ? "black" : "green";
     win = pick === result;
-    multiplier = result === "green" ? 10 : 2;
+    multiplier = pick === "green" ? 10 : 2;
+    chance = pick === "green" ? 6 : 47;
+    resultLabel = result === "red" ? "빨강" : result === "black" ? "검정" : "초록";
   } else {
     return false;
   }
@@ -710,7 +723,12 @@ function playMiniGame(room, player, game, choice, amount) {
     saveFootballCoins(player.accountId, nextWallet);
   }
   const gameNames = { coin: "동전", dice: "주사위", number: "숫자", roulette: "룰렛" };
-  addMiniEvent(room, `${player.name}: ${gameNames[game] || game} ${safeAmount}P 베팅, 선택 ${pick}, 결과 ${result} - ${win ? `${payout}P 획득` : "실패"}`, win ? "success" : "danger");
+  addMiniEvent(
+    room,
+    `${player.name}: ${gameNames[game] || game} ${safeAmount}P 베팅, 성공률 ${chance}%, 성공 시 ${safeAmount * multiplier}P, 결과 ${resultLabel} - ${win ? `${payout}P 획득` : "실패"}`,
+    win ? "success" : "danger",
+    { game, choice: pick, result, resultLabel, win, amount: safeAmount, payout, multiplier, chance },
+  );
   return true;
 }
 
@@ -760,8 +778,10 @@ function placeFootballBet(room, player, side, amount) {
   const wallet = room.footballWallets.get(player.id) ?? FOOTBALL_START_COINS;
   const existing = room.footballBets.get(player.id);
   const available = adminWallet ? 1000000 : wallet + (existing?.amount || 0);
-  const safeAmount = clampInt(amount, 10, Math.max(10, available));
-  if (safeAmount > available) return false;
+  const maxBet = adminWallet ? available : Math.max(0, available - MIN_COIN_BALANCE);
+  if (!adminWallet && maxBet < 10) return false;
+  const safeAmount = clampInt(amount, 10, Math.max(10, maxBet));
+  if (safeAmount > maxBet) return false;
   const nextWallet = available - safeAmount;
   if (!adminWallet) {
     room.footballWallets.set(player.id, nextWallet);
