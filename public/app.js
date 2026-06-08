@@ -29,6 +29,9 @@ let account = null;
 let selectedMode = "mafia";
 let lastFootballEventId = null;
 let lastMiniEventId = null;
+let lastAdminStatsRequestAt = 0;
+let miniSpinStartedAt = 0;
+let miniRevealTimer = null;
 const sessionId = getSessionId();
 
 async function loadMeta() {
@@ -63,12 +66,20 @@ function connect() {
     } else if (data.type === "auth") {
       if (data.user) {
         setAccount(data.user);
-        if (data.token) localStorage.setItem("mafiaAuthToken", data.token);
-        else if (data.sessionToken) sessionStorage.setItem("mafiaAuthToken", data.sessionToken);
+        if (data.token) {
+          sessionStorage.removeItem("mafiaAuthToken");
+          localStorage.setItem("mafiaAuthToken", data.token);
+          localStorage.setItem("mafiaRememberLogin", "1");
+        } else if (data.sessionToken) {
+          localStorage.removeItem("mafiaAuthToken");
+          localStorage.setItem("mafiaRememberLogin", "0");
+          sessionStorage.setItem("mafiaAuthToken", data.sessionToken);
+        }
         showHome();
       } else {
         account = null;
         localStorage.removeItem("mafiaAuthToken");
+        localStorage.removeItem("mafiaRememberLogin");
         sessionStorage.removeItem("mafiaAuthToken");
         showAuth();
       }
@@ -81,6 +92,8 @@ function connect() {
     } else if (data.type === "adminFeedback") {
       renderAdminFeedback(data.feedbacks || []);
       if (data.latest) toast(`새 피드백: ${data.latest.displayName || data.latest.username}`);
+    } else if (data.type === "adminStats") {
+      renderAdminStats(data);
     } else if (data.type === "toast") {
       toast(data.message);
     } else if (data.type === "error" || data.type === "notice") {
@@ -146,6 +159,7 @@ function showAuth() {
   $("homePanel").classList.add("hidden");
   $("joinPanel").classList.add("hidden");
   $("gamePanel").classList.add("hidden");
+  $("rememberLogin").checked = localStorage.getItem("mafiaRememberLogin") !== "0";
 }
 
 function showHome() {
@@ -212,6 +226,11 @@ function render() {
   const isFootball = state.mode === "football";
   const isMini = state.mode === "mini";
   const role = state.you?.role;
+  $("adminToolsPanel")?.classList.toggle("hidden", !state.account?.isAdmin);
+  if (state.account?.isAdmin && Date.now() - lastAdminStatsRequestAt > 4000) {
+    lastAdminStatsRequestAt = Date.now();
+    send("adminStats");
+  }
   $("roomCode").textContent = state.code;
   $("phaseText").textContent = isFootball ? footballPhaseLabel(state.football?.phase) : isMini ? "미니게임" : phaseLabels[state.phase] || state.phase;
   $("winnerText").textContent = state.winnerText || "";
@@ -465,10 +484,15 @@ function renderMini() {
 function startMiniEffect(game, choice) {
   const stage = $("miniStage");
   if (!stage) return;
+  miniSpinStartedAt = Date.now();
+  clearTimeout(miniRevealTimer);
   stage.className = `mini-stage rolling ${game}`;
+  stage.dataset.result = "";
   $("coinVisual").textContent = "?";
   $("diceVisual").textContent = "?";
+  $("diceVisual").dataset.roll = "";
   $("numberVisual").textContent = "?";
+  $("numberVisual").dataset.roll = "";
   $("rouletteVisual").dataset.result = "";
   $("rouletteVisual").style.setProperty("--roulette-stop", "900deg");
   $("rouletteVisual").querySelector("span").textContent = "";
@@ -480,20 +504,29 @@ function renderMiniEffect(event) {
   if (!event || !event.game) return;
   const eventId = `${event.at}:${event.text}`;
   if (eventId === lastMiniEventId) return;
-  lastMiniEventId = eventId;
   const stage = $("miniStage");
   if (!stage) return;
+  const reveal = () => {
+    if (eventId === lastMiniEventId) return;
+    lastMiniEventId = eventId;
   stage.className = `mini-stage settled ${event.game} ${event.win ? "win" : "lose"}`;
+  stage.dataset.result = event.result || "";
   $("miniResultTitle").textContent = event.win ? "성공!" : "실패";
   $("miniResultText").textContent = `성공률 ${event.chance}% · 성공 시 ${event.amount * event.multiplier}P · 결과 ${event.resultLabel} · ${event.win ? `${event.payout}P 획득` : "베팅 실패"}`;
   $("coinVisual").textContent = event.game === "coin" ? (event.result === "back" ? "뒤" : "앞") : "?";
   $("diceVisual").textContent = event.game === "dice" ? event.resultLabel : "?";
+  $("diceVisual").dataset.roll = event.game === "dice" ? event.resultLabel : "";
   $("numberVisual").textContent = event.game === "number" ? event.resultLabel : "?";
+  $("numberVisual").dataset.roll = event.game === "number" ? event.resultLabel : "";
   const roulette = $("rouletteVisual");
   roulette.dataset.result = event.result || "";
   const rouletteAngles = { red: "1110deg", black: "1260deg", green: "1410deg" };
   roulette.style.setProperty("--roulette-stop", rouletteAngles[event.result] || "1080deg");
   roulette.querySelector("span").textContent = event.game === "roulette" ? event.resultLabel : "";
+  };
+  const wait = Math.max(0, 1050 - (Date.now() - miniSpinStartedAt));
+  if (stage.classList.contains("rolling") && wait > 0) miniRevealTimer = setTimeout(reveal, wait);
+  else reveal();
 }
 
 function renderPitch(football) {
@@ -671,6 +704,19 @@ function renderAdminFeedback(items) {
     : `<p class="hint">아직 피드백이 없습니다.</p>`;
 }
 
+function renderAdminStats(data) {
+  const box = $("adminUsersBox");
+  if (!box) return;
+  $("adminStatsText").textContent = `접속 ${data.clients || 0}명 · 방 ${data.rooms || 0}개 · 계정 ${data.users?.length || 0}개`;
+  box.innerHTML = data.users?.length
+    ? data.users.map((user) => `
+      <div class="admin-user-row">
+        <strong>${escapeHtml(user.displayName || user.username)}</strong>
+        <span>@${escapeHtml(user.username)} · ${user.isAdmin ? "관리자" : `${user.footballCoins ?? 0}P`}</span>
+      </div>`).join("")
+    : `<p class="hint">계정 정보가 없습니다.</p>`;
+}
+
 function toast(message) {
   const el = $("toast");
   el.textContent = message;
@@ -715,6 +761,7 @@ $("saveProfileBtn").addEventListener("click", saveProfile);
 $("deleteAccountBtn").addEventListener("click", deleteAccount);
 $("logoutBtn").addEventListener("click", () => {
   localStorage.removeItem("mafiaAuthToken");
+  localStorage.removeItem("mafiaRememberLogin");
   sessionStorage.removeItem("mafiaAuthToken");
   send("authLogout");
 });
@@ -731,6 +778,13 @@ $("startBtn").addEventListener("click", () => send("start"));
 $("footballStartBtn").addEventListener("click", () => send("start"));
 $("resetBtn").addEventListener("click", () => send("reset"));
 $("leaveBtn").addEventListener("click", () => send("leave"));
+$("adminStartFootballBtn").addEventListener("click", () => send("adminStartFootball"));
+$("adminGiftCoinsBtn").addEventListener("click", () => send("adminGiftCoins", { amount: 1000 }));
+$("adminResetRoomBtn").addEventListener("click", () => send("adminResetRoom"));
+$("adminRefreshBtn").addEventListener("click", () => {
+  lastAdminStatsRequestAt = Date.now();
+  send("adminStats");
+});
 $("copyInviteBtn").addEventListener("click", copyInvite);
 $("shareInviteBtn").addEventListener("click", shareInvite);
 $("chatForm").addEventListener("submit", (event) => {
@@ -769,6 +823,9 @@ document.querySelectorAll(".bet-btn").forEach((button) => {
 document.querySelectorAll(".mini-btn").forEach((button) => {
   button.addEventListener("click", () => {
     const amount = $("miniAmount").value || 100;
+    button.classList.remove("pulse-pick");
+    void button.offsetWidth;
+    button.classList.add("pulse-pick");
     startMiniEffect(button.dataset.game, button.dataset.choice);
     send("miniPlay", { game: button.dataset.game, choice: button.dataset.choice, amount });
   });
@@ -782,7 +839,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) connect();
 });
 setInterval(() => {
-if (state?.mode === "football") {
+  if (state?.mode === "football") {
     $("footballClock").textContent = footballClockText(state.football);
     $("footballResult").textContent = state.football?.winnerText || footballSummary(state.football);
   }
