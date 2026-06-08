@@ -1195,6 +1195,19 @@ function handleAction(id, message) {
     return broadcast(room);
   }
 
+  if (data.action === "adminGrantCoins") {
+    if (!isAdminClient(client)) return;
+    const target = room.players.get(String(data.targetId || ""));
+    if (!target) return send(client.socket, { type: "error", message: "지급 대상을 찾을 수 없습니다." });
+    const amount = clampInt(data.amount, 1, 1000000);
+    const nextCoins = (room.footballWallets.get(target.id) ?? footballCoinsFor(target.accountId)) + amount;
+    room.footballWallets.set(target.id, nextCoins);
+    if (!isAdminAccountId(target.accountId)) saveFootballCoins(target.accountId, nextCoins);
+    addLog(room, `관리자가 ${target.name} 님에게 ${amount}P를 지급했습니다.`, "success");
+    addEvent(room, "admin-grant", "관리자 지급", `${target.name} 님에게 ${amount}P 지급`, "success");
+    return broadcast(room);
+  }
+
   if (data.action === "adminResetRoom") {
     if (!isAdminClient(client)) return;
     resetRoom(room);
