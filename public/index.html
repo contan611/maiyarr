@@ -57,7 +57,7 @@
           <button class="game-card-btn" data-pick-mode="football">
             <span>베팅 경기</span>
             <strong>AI 축구</strong>
-            <p>승자에 베팅하고 경기 중 슈팅/수비로 개입합니다.</p>
+            <p>승자에 베팅하고 AI 경기 하이라이트를 지켜봅니다.</p>
           </button>
           <button class="game-card-btn" data-pick-mode="mini">
             <span>포인트 게임</span>
@@ -187,7 +187,7 @@
           <div class="panel-head">
             <div>
               <h3>AI 축구</h3>
-              <p class="hint">베팅 후 AI 경기가 시작됩니다. 경기 중 직접 슈팅/수비로 개입할 수 있습니다.</p>
+              <p class="hint">베팅 후 AI 경기가 시작되고 골 장면, 선방, 역습 하이라이트가 진행됩니다.</p>
             </div>
             <button id="footballStartBtn" class="primary hidden">베팅 열기</button>
           </div>
@@ -268,18 +268,26 @@
               베팅 포인트
               <input id="miniAmount" type="number" min="10" step="10" value="100" />
             </label>
-            <button class="mini-btn" data-game="coin" data-choice="front">동전 앞면</button>
-            <button class="mini-btn" data-game="coin" data-choice="back">동전 뒷면</button>
-            <button class="mini-btn" data-game="dice" data-choice="odd">주사위 홀</button>
-            <button class="mini-btn" data-game="dice" data-choice="even">주사위 짝</button>
-            <button class="mini-btn" data-game="number" data-choice="1">숫자 1</button>
-            <button class="mini-btn" data-game="number" data-choice="2">숫자 2</button>
-            <button class="mini-btn" data-game="number" data-choice="3">숫자 3</button>
-            <button class="mini-btn" data-game="number" data-choice="4">숫자 4</button>
-            <button class="mini-btn" data-game="number" data-choice="5">숫자 5</button>
-            <button class="mini-btn" data-game="roulette" data-choice="red">룰렛 빨강</button>
-            <button class="mini-btn" data-game="roulette" data-choice="black">룰렛 검정</button>
-            <button class="mini-btn jackpot" data-game="roulette" data-choice="green">룰렛 초록</button>
+            <button class="mini-btn" data-game="coin" data-choice="front">동전 앞면<small>50% · 성공 x2</small></button>
+            <button class="mini-btn" data-game="coin" data-choice="back">동전 뒷면<small>50% · 성공 x2</small></button>
+            <button class="mini-btn" data-game="dice" data-choice="odd">주사위 홀<small>50% · 성공 x2</small></button>
+            <button class="mini-btn" data-game="dice" data-choice="even">주사위 짝<small>50% · 성공 x2</small></button>
+            <button class="mini-btn" data-game="number" data-choice="1">숫자 1<small>20% · 성공 x5</small></button>
+            <button class="mini-btn" data-game="number" data-choice="2">숫자 2<small>20% · 성공 x5</small></button>
+            <button class="mini-btn" data-game="number" data-choice="3">숫자 3<small>20% · 성공 x5</small></button>
+            <button class="mini-btn" data-game="number" data-choice="4">숫자 4<small>20% · 성공 x5</small></button>
+            <button class="mini-btn" data-game="number" data-choice="5">숫자 5<small>20% · 성공 x5</small></button>
+            <button class="mini-btn" data-game="roulette" data-choice="red">룰렛 빨강<small>47% · 성공 x2</small></button>
+            <button class="mini-btn" data-game="roulette" data-choice="black">룰렛 검정<small>47% · 성공 x2</small></button>
+            <button class="mini-btn jackpot" data-game="roulette" data-choice="green">룰렛 초록<small>6% · 성공 x10</small></button>
+          </div>
+          <div id="miniStage" class="mini-stage">
+            <div class="mini-visual coin-visual" id="coinVisual">앞</div>
+            <div class="mini-visual dice-visual" id="diceVisual">?</div>
+            <div class="mini-visual roulette-visual" id="rouletteVisual"><span></span></div>
+            <div class="mini-visual number-visual" id="numberVisual">?</div>
+            <strong id="miniResultTitle">게임을 선택하세요</strong>
+            <p id="miniResultText">성공률과 성공 시 획득량을 확인하고 베팅하세요. 코인은 100P 아래로 내려가지 않습니다.</p>
           </div>
           <div id="miniEvents" class="football-events"></div>
         </section>
@@ -338,4 +346,5 @@
     <script src="/app.js"></script>
   </body>
 </html>
+
 
